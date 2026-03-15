@@ -2,6 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
+      <module fileurl="file://$PROJECT_DIR$/skinsmarket/demo.iml" filepath="$PROJECT_DIR$/skinsmarket/demo.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/skinsmarket.iml" filepath="$PROJECT_DIR$/.idea/skinsmarket.iml" />
     </modules>
   </component>

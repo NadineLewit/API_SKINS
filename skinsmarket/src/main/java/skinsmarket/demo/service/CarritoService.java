@@ -1,0 +1,106 @@
+package skinsmarket.demo.service;
+
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import skinsmarket.demo.entity.Carrito;
+import skinsmarket.demo.entity.ItemCarrito;
+import skinsmarket.demo.entity.Skin;
+import skinsmarket.demo.entity.Usuario;
+import skinsmarket.demo.repository.CarritoRepository;
+import skinsmarket.demo.repository.ItemCarritoRepository;
+import skinsmarket.demo.repository.SkinRepository;
+
+import java.math.BigDecimal;
+
+@Service
+@RequiredArgsConstructor
+public class CarritoService {
+
+    private final CarritoRepository carritoRepository;
+    private final ItemCarritoRepository itemCarritoRepository;
+    private final SkinRepository skinRepository;
+    private final UsuarioService usuarioService;
+
+    // Obtener el carrito del usuario, o crear uno si no tiene
+    public Carrito obtenerOCrearCarrito(String username) {
+        Usuario usuario = usuarioService.obtenerPorUsername(username);
+        return carritoRepository.findByUsuario(usuario)
+                .orElseGet(() -> {
+                    Carrito nuevo = new Carrito();
+                    nuevo.setUsuario(usuario);
+                    nuevo.setEstado(Carrito.Estado.VACIO);
+                    return carritoRepository.save(nuevo);
+                });
+    }
+
+    // Agregar una skin al carrito
+    public Carrito agregarSkin(String username, Long skinId, Integer cantidad) {
+        if (cantidad <= 0) throw new RuntimeException("La cantidad debe ser mayor a 0");
+
+        Skin skin = skinRepository.findById(skinId)
+                .orElseThrow(() -> new RuntimeException("Skin no encontrada"));
+
+        if (!skin.getActiva()) throw new RuntimeException("La skin no está disponible");
+        if (skin.getStock() < cantidad) throw new RuntimeException("Stock insuficiente");
+
+        Carrito carrito = obtenerOCrearCarrito(username);
+
+        // Si la skin ya está en el carrito, sumamos la cantidad
+        ItemCarrito item = carrito.getItems().stream()
+                .filter(i -> i.getSkin().getId().equals(skinId))
+                .findFirst()
+                .orElseGet(() -> {
+                    ItemCarrito nuevo = new ItemCarrito();
+                    nuevo.setCarrito(carrito);
+                    nuevo.setSkin(skin);
+                    nuevo.setCantidad(0);
+                    nuevo.setPrecioUnitario(skin.getPrecio());
+                    carrito.getItems().add(nuevo);
+                    return nuevo;
+                });
+
+        item.setCantidad(item.getCantidad() + cantidad);
+        item.setSubtotal(item.getPrecioUnitario().multiply(BigDecimal.valueOf(item.getCantidad())));
+
+        carrito.setEstado(Carrito.Estado.ACTIVO);
+        return carritoRepository.save(carrito);
+    }
+
+    // Modificar cantidad de un item
+    public Carrito modificarCantidad(String username, Long itemId, Integer cantidad) {
+        if (cantidad <= 0) throw new RuntimeException("La cantidad debe ser mayor a 0");
+
+        Carrito carrito = obtenerOCrearCarrito(username);
+
+        ItemCarrito item = carrito.getItems().stream()
+                .filter(i -> i.getId().equals(itemId))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("Item no encontrado en el carrito"));
+
+        item.setCantidad(cantidad);
+        item.setSubtotal(item.getPrecioUnitario().multiply(BigDecimal.valueOf(cantidad)));
+
+        return carritoRepository.save(carrito);
+    }
+
+    // Eliminar un item del carrito
+    public Carrito eliminarItem(String username, Long itemId) {
+        Carrito carrito = obtenerOCrearCarrito(username);
+
+        carrito.getItems().removeIf(i -> i.getId().equals(itemId));
+
+        if (carrito.getItems().isEmpty()) {
+            carrito.setEstado(Carrito.Estado.VACIO);
+        }
+
+        return carritoRepository.save(carrito);
+    }
+
+    // Vaciar todo el carrito
+    public Carrito vaciar(String username) {
+        Carrito carrito = obtenerOCrearCarrito(username);
+        carrito.getItems().clear();
+        carrito.setEstado(Carrito.Estado.VACIO);
+        return carritoRepository.save(carrito);
+    }
+}

@@ -1,5 +1,6 @@
     package skinsmarket.demo.controller;
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import skinsmarket.demo.entity.Categoria;
 import skinsmarket.demo.service.CategoriaService;
 import lombok.RequiredArgsConstructor;
@@ -8,6 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
+@SecurityRequirement(name = "bearerAuth")
 @RequestMapping("/categorias")
 @RequiredArgsConstructor
 public class CategoriaController {

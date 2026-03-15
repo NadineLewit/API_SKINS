@@ -1,5 +1,6 @@
 package skinsmarket.demo.entity;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.time.LocalDateTime;
@@ -20,6 +21,7 @@ public class Usuario {
     private String email;
 
     @Column(nullable = false)
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String password;
 
     private String nombre;
