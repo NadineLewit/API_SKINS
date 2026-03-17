@@ -38,4 +38,11 @@ public class UsuarioController {
         Usuario usuario = usuarioService.obtenerPorUsername(userDetails.getUsername());
         return ResponseEntity.ok(usuario);
     }
+    // PUT /usuarios/me — actualizar mi perfil
+    @PutMapping("/me")
+    public ResponseEntity<Usuario> actualizar(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestBody RegistroRequest request) {
+        return ResponseEntity.ok(usuarioService.actualizar(userDetails.getUsername(), request));
+    }
 }

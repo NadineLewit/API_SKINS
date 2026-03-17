@@ -9,6 +9,7 @@ import skinsmarket.demo.dto.LoginRequest;
 import skinsmarket.demo.dto.LoginResponse;
 import skinsmarket.demo.dto.RegistroRequest;
 import skinsmarket.demo.entity.Usuario;
+import skinsmarket.demo.exception.UsuarioNoEncontradoException;
 import skinsmarket.demo.repository.UsuarioRepository;
 import skinsmarket.demo.security.JwtUtil;
 
@@ -48,7 +49,7 @@ public class UsuarioService {
 
         // Si llegamos acá, las credenciales son correctas
         Usuario usuario = usuarioRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+                .orElseThrow(() -> new UsuarioNoEncontradoException());
 
         String token = jwtUtil.generarToken(usuario.getUsername());
 
@@ -57,6 +58,13 @@ public class UsuarioService {
 
     public Usuario obtenerPorUsername(String username) {
         return usuarioRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+                .orElseThrow(() -> new UsuarioNoEncontradoException());
+    }
+    public Usuario actualizar(String username, RegistroRequest request) {
+        Usuario usuario = obtenerPorUsername(username);
+        if (request.getNombre() != null) usuario.setNombre(request.getNombre());
+        if (request.getApellido() != null) usuario.setApellido(request.getApellido());
+        if (request.getEmail() != null) usuario.setEmail(request.getEmail());
+        return usuarioRepository.save(usuario);
     }
 }

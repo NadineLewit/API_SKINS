@@ -6,6 +6,7 @@ import skinsmarket.demo.entity.Carrito;
 import skinsmarket.demo.entity.ItemCarrito;
 import skinsmarket.demo.entity.Skin;
 import skinsmarket.demo.entity.Usuario;
+import skinsmarket.demo.exception.StockInsuficienteException;
 import skinsmarket.demo.repository.CarritoRepository;
 import skinsmarket.demo.repository.ItemCarritoRepository;
 import skinsmarket.demo.repository.SkinRepository;
@@ -41,7 +42,8 @@ public class CarritoService {
                 .orElseThrow(() -> new RuntimeException("Skin no encontrada"));
 
         if (!skin.getActiva()) throw new RuntimeException("La skin no está disponible");
-        if (skin.getStock() < cantidad) throw new RuntimeException("Stock insuficiente");
+        if (skin.getStock() < cantidad) throw new StockInsuficienteException();
+
 
         Carrito carrito = obtenerOCrearCarrito(username);
 
