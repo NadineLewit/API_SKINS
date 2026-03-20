@@ -19,6 +19,8 @@ public class OrdenService {
     private final CuponRepository cuponRepository;
     private final UsuarioService usuarioService;
 
+
+
     public Orden finalizarCompra(String username, String codigoCupon) {
         Usuario usuario = usuarioService.obtenerPorUsername(username);
 
@@ -83,5 +85,10 @@ public class OrdenService {
     public Orden obtenerPorId(Long id) {
         return ordenRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Orden no encontrada"));
+    }
+
+    public List<Orden> misVentas(String username) {
+        Usuario vendedor = usuarioService.obtenerPorUsername(username);
+        return ordenRepository.findByDetalles_Skin_Vendedor(vendedor);
     }
 }

@@ -40,4 +40,8 @@ public class Skin {
     private Double descuento = 0.0;
 
     private LocalDateTime fechaAlta = LocalDateTime.now();
+
+    @ManyToOne
+    @JoinColumn(name = "vendedor_id")
+    private Usuario vendedor;
 }

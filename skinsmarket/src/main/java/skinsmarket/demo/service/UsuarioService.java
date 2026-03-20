@@ -67,4 +67,9 @@ public class UsuarioService {
         if (request.getEmail() != null) usuario.setEmail(request.getEmail());
         return usuarioRepository.save(usuario);
     }
+
+    public void eliminar(String username) {
+        Usuario usuario = obtenerPorUsername(username);
+        usuarioRepository.delete(usuario);
+    }
 }

@@ -34,4 +34,9 @@ public class OrdenController {
     public ResponseEntity<Orden> obtener(@PathVariable Long id) {
         return ResponseEntity.ok(ordenService.obtenerPorId(id));
     }
+
+    @GetMapping("/mis-ventas")
+    public ResponseEntity<List<Orden>> misVentas(@AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(ordenService.misVentas(userDetails.getUsername()));
+    }
 }

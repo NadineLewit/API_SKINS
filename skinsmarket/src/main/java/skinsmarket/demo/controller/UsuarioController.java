@@ -45,4 +45,10 @@ public class UsuarioController {
             @RequestBody RegistroRequest request) {
         return ResponseEntity.ok(usuarioService.actualizar(userDetails.getUsername(), request));
     }
+
+    @DeleteMapping("/me")
+    public ResponseEntity<Void> eliminar(@AuthenticationPrincipal UserDetails userDetails) {
+        usuarioService.eliminar(userDetails.getUsername());
+        return ResponseEntity.noContent().build();
+    }
 }

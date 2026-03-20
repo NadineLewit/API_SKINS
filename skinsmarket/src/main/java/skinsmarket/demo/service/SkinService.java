@@ -1,17 +1,20 @@
 package skinsmarket.demo.service;
 
 import skinsmarket.demo.entity.Skin;
+import skinsmarket.demo.entity.Usuario;
 import skinsmarket.demo.exception.SkinNoDisponibleException;
 import skinsmarket.demo.repository.SkinRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import java.util.List;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 @Service
 @RequiredArgsConstructor
 public class SkinService {
 
     private final SkinRepository skinRepository;
+    private final UsuarioService usuarioService;
 
     public List<Skin> listarActivas() {
         return skinRepository.findByActivaTrue();
@@ -22,13 +25,16 @@ public class SkinService {
                 .orElseThrow(() -> new SkinNoDisponibleException());
     }
 
-    public Skin crear(Skin skin) {
+    public Skin crear(Skin skin, String username) {
         if (skin.getPrecio() == null || skin.getPrecio().doubleValue() <= 0)
             throw new RuntimeException("El precio debe ser mayor a 0");
         if (skin.getStock() == null || skin.getStock() < 0)
             throw new RuntimeException("El stock no puede ser negativo");
         if (skin.getNombre() == null || skin.getNombre().isBlank())
             throw new RuntimeException("El nombre no puede estar vacío");
+
+        Usuario vendedor = usuarioService.obtenerPorUsername(username);
+        skin.setVendedor(vendedor);
         return skinRepository.save(skin);
     }
 

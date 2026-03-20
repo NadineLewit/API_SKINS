@@ -2,6 +2,7 @@ package skinsmarket.demo.security;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.security.Key;
@@ -10,18 +11,21 @@ import java.util.Date;
 @Component
 public class JwtUtil {
 
-    private static final String SECRET = "clave-super-secreta-para-jwt-skinsmarket-2024";
-    private static final long EXPIRACION = 1000 * 60 * 60 * 24; // 24 horas
+    @Value("${jwt.secret}")
+    private String secret;
+
+    @Value("${jwt.expiration}")
+    private long expiracion;
 
     private Key getKey() {
-        return Keys.hmacShaKeyFor(SECRET.getBytes());
+        return Keys.hmacShaKeyFor(secret.getBytes());
     }
 
     public String generarToken(String username) {
         return Jwts.builder()
                 .subject(username)
                 .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + EXPIRACION))
+                .expiration(new Date(System.currentTimeMillis() + expiracion))
                 .signWith(getKey())
                 .compact();
     }

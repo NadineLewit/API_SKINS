@@ -1,6 +1,8 @@
 package skinsmarket.demo.controller;
 
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import skinsmarket.demo.entity.Skin;
 import skinsmarket.demo.service.SkinService;
 import lombok.RequiredArgsConstructor;
@@ -27,8 +29,10 @@ public class SkinController {
     }
 
     @PostMapping
-    public ResponseEntity<Skin> crear(@RequestBody Skin skin) {
-        return ResponseEntity.ok(skinService.crear(skin));
+    public ResponseEntity<Skin> crear(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestBody Skin skin) {
+        return ResponseEntity.ok(skinService.crear(skin, userDetails.getUsername()));
     }
 
     @PutMapping("/{id}")
