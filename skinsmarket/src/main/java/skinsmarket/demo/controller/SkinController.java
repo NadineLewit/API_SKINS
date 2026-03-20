@@ -18,16 +18,19 @@ public class SkinController {
 
     private final SkinService skinService;
 
+    // GET /skins — catálogo público, todas las skins activas
     @GetMapping
     public List<Skin> listar() {
         return skinService.listarActivas();
     }
 
+    // GET /skins/{id} — detalle de una skin
     @GetMapping("/{id}")
     public ResponseEntity<Skin> obtener(@PathVariable Long id) {
         return ResponseEntity.ok(skinService.obtenerPorId(id));
     }
 
+    // POST /skins — publicar una skin (cualquier usuario autenticado puede vender)
     @PostMapping
     public ResponseEntity<Skin> crear(
             @AuthenticationPrincipal UserDetails userDetails,
@@ -35,14 +38,33 @@ public class SkinController {
         return ResponseEntity.ok(skinService.crear(skin, userDetails.getUsername()));
     }
 
+    // PUT /skins/{id} — editar una skin
     @PutMapping("/{id}")
-    public ResponseEntity<Skin> actualizar(@PathVariable Long id, @RequestBody Skin skin) {
-        return ResponseEntity.ok(skinService.actualizar(id, skin));
+    public ResponseEntity<Skin> actualizar(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable Long id,
+            @RequestBody Skin skin) {
+        return ResponseEntity.ok(skinService.actualizar(id, skin, userDetails.getUsername()));
     }
 
+    // DELETE /skins/{id} — desactivar una skin (baja lógica)
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> desactivar(@PathVariable Long id) {
-        skinService.desactivar(id);
+    public ResponseEntity<Void> desactivar(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable Long id) {
+        skinService.desactivar(id, userDetails.getUsername());
         return ResponseEntity.noContent().build();
+    }
+
+    // GET /skins/mis-ventas — ver todas las skins que publiqué
+    @GetMapping("/mis-ventas")
+    public ResponseEntity<List<Skin>> misVentas(@AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(skinService.misVentas(userDetails.getUsername()));
+    }
+
+    // GET /skins/mis-ventas/activas — ver solo las skins activas que publiqué
+    @GetMapping("/mis-ventas/activas")
+    public ResponseEntity<List<Skin>> misVentasActivas(@AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(skinService.misVentasActivas(userDetails.getUsername()));
     }
 }

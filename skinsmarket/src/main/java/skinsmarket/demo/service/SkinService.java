@@ -7,7 +7,6 @@ import skinsmarket.demo.repository.SkinRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import java.util.List;
-import org.springframework.security.core.context.SecurityContextHolder;
 
 @Service
 @RequiredArgsConstructor
@@ -26,24 +25,26 @@ public class SkinService {
     }
 
     public Skin crear(Skin skin, String username) {
+        if (skin.getNombre() == null || skin.getNombre().isBlank())
+            throw new RuntimeException("El nombre no puede estar vacío");
         if (skin.getPrecio() == null || skin.getPrecio().doubleValue() <= 0)
             throw new RuntimeException("El precio debe ser mayor a 0");
         if (skin.getStock() == null || skin.getStock() < 0)
             throw new RuntimeException("El stock no puede ser negativo");
-        if (skin.getNombre() == null || skin.getNombre().isBlank())
-            throw new RuntimeException("El nombre no puede estar vacío");
 
         Usuario vendedor = usuarioService.obtenerPorUsername(username);
         skin.setVendedor(vendedor);
         return skinRepository.save(skin);
     }
 
-    public Skin actualizar(Long id, Skin datos) {
+    public Skin actualizar(Long id, Skin datos, String username) {
         if (datos.getPrecio() != null && datos.getPrecio().doubleValue() <= 0)
             throw new RuntimeException("El precio debe ser mayor a 0");
         if (datos.getStock() != null && datos.getStock() < 0)
             throw new RuntimeException("El stock no puede ser negativo");
         Skin skin = obtenerPorId(id);
+        if (!skin.getVendedor().getUsername().equals(username))
+            throw new RuntimeException("Solo el vendedor puede editar esta skin");
         skin.setNombre(datos.getNombre());
         skin.setDescripcion(datos.getDescripcion());
         skin.setPrecio(datos.getPrecio());
@@ -58,9 +59,23 @@ public class SkinService {
         return skinRepository.save(skin);
     }
 
-    public void desactivar(Long id) {
+    public void desactivar(Long id, String username) {
         Skin skin = obtenerPorId(id);
+        if (!skin.getVendedor().getUsername().equals(username))
+            throw new RuntimeException("Solo el vendedor puede desactivar esta skin");
         skin.setActiva(false);
         skinRepository.save(skin);
+    }
+
+    // Todas las skins publicadas por el usuario (activas e inactivas)
+    public List<Skin> misVentas(String username) {
+        Usuario vendedor = usuarioService.obtenerPorUsername(username);
+        return skinRepository.findByVendedor(vendedor);
+    }
+
+    // Solo las skins activas publicadas por el usuario
+    public List<Skin> misVentasActivas(String username) {
+        Usuario vendedor = usuarioService.obtenerPorUsername(username);
+        return skinRepository.findByVendedorAndActivaTrue(vendedor);
     }
 }
