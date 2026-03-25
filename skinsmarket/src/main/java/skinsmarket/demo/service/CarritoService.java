@@ -15,7 +15,7 @@ import java.math.BigDecimal;
 
 @Service
 @RequiredArgsConstructor
-public class CarritoService {
+public class CarritoService implements ICarritoService{
 
     private final CarritoRepository carritoRepository;
     private final ItemCarritoRepository itemCarritoRepository;

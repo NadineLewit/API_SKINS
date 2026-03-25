@@ -6,6 +6,8 @@ import skinsmarket.demo.service.CategoriaService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import skinsmarket.demo.service.ICategoriaService;
+
 import java.util.List;
 
 @RestController
@@ -14,7 +16,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class CategoriaController {
 
-    private final CategoriaService categoriaService;
+    private final ICategoriaService categoriaService;
 
     @GetMapping
     public List<Categoria> listar() {

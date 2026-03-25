@@ -8,6 +8,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import skinsmarket.demo.entity.Carrito;
 import skinsmarket.demo.service.CarritoService;
+import skinsmarket.demo.service.ICarritoService;
 
 @RestController
 @SecurityRequirement(name = "bearerAuth")
@@ -15,7 +16,7 @@ import skinsmarket.demo.service.CarritoService;
 @RequiredArgsConstructor
 public class CarritoController {
 
-    private final CarritoService carritoService;
+    private final ICarritoService carritoService;
 
     // GET /carrito — ver mi carrito actual
     @GetMapping

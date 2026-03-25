@@ -10,7 +10,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-public class SkinService {
+public class SkinService implements ISkinService {
 
     private final SkinRepository skinRepository;
     private final UsuarioService usuarioService;

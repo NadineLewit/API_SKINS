@@ -8,7 +8,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-public class CategoriaService {
+public class CategoriaService implements ICategoriaService {
 
     private final CategoriaRepository categoriaRepository;
 

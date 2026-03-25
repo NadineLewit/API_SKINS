@@ -6,6 +6,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import skinsmarket.demo.entity.Cupon;
 import skinsmarket.demo.service.CuponService;
+import skinsmarket.demo.service.ICuponService;
+
 import java.util.List;
 
 @RestController
@@ -14,7 +16,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class CuponController {
 
-    private final CuponService cuponService;
+    private final ICuponService cuponService;
 
     @PostMapping("/validar")
     public ResponseEntity<Cupon> validar(@RequestParam String codigo) {

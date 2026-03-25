@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import skinsmarket.demo.entity.Skin;
+import skinsmarket.demo.service.ISkinService;
 import skinsmarket.demo.service.SkinService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -16,7 +17,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SkinController {
 
-    private final SkinService skinService;
+    private final ISkinService skinService;
 
     // GET /skins — catálogo público, todas las skins activas
     @GetMapping

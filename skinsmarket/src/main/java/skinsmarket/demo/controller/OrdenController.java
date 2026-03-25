@@ -7,6 +7,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import skinsmarket.demo.entity.Orden;
+import skinsmarket.demo.service.IOrdenService;
 import skinsmarket.demo.service.OrdenService;
 import java.util.List;
 
@@ -16,7 +17,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class OrdenController {
 
-    private final OrdenService ordenService;
+    private final IOrdenService ordenService;
 
     @PostMapping
     public ResponseEntity<Orden> finalizar(

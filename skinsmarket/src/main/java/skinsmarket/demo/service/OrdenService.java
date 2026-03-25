@@ -11,7 +11,7 @@ import java.util.List;
 //w
 @Service
 @RequiredArgsConstructor
-public class OrdenService {
+public class OrdenService implements IOrdenService {
 
     private final OrdenRepository ordenRepository;
     private final CarritoRepository carritoRepository;

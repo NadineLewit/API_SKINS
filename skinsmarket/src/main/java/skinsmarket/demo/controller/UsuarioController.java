@@ -10,6 +10,7 @@ import skinsmarket.demo.dto.LoginRequest;
 import skinsmarket.demo.dto.LoginResponse;
 import skinsmarket.demo.dto.RegistroRequest;
 import skinsmarket.demo.entity.Usuario;
+import skinsmarket.demo.service.IUsuarioService;
 import skinsmarket.demo.service.UsuarioService;
 
 @RestController
@@ -18,7 +19,7 @@ import skinsmarket.demo.service.UsuarioService;
 @RequiredArgsConstructor
 public class UsuarioController {
 
-    private final UsuarioService usuarioService;
+    private final IUsuarioService usuarioService;
 
     // POST /usuarios/registro — crear cuenta nueva
     @PostMapping("/registro")

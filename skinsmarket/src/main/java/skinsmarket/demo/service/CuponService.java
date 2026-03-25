@@ -9,7 +9,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-public class CuponService {
+public class CuponService implements ICuponService{
 
     private final CuponRepository cuponRepository;
 
