@@ -53,7 +53,6 @@ public class SkinService implements ISkinService {
         skin.setCategoria(datos.getCategoria());
         skin.setRareza(datos.getRareza());
         skin.setExterior(datos.getExterior());
-        skin.setColeccion(datos.getColeccion());
         skin.setStattrak(datos.getStattrak());
         skin.setDescuento(datos.getDescuento());
         return skinRepository.save(skin);
@@ -67,13 +66,11 @@ public class SkinService implements ISkinService {
         skinRepository.save(skin);
     }
 
-    // Todas las skins publicadas por el usuario (activas e inactivas)
     public List<Skin> misVentas(String username) {
         Usuario vendedor = usuarioService.obtenerPorUsername(username);
         return skinRepository.findByVendedor(vendedor);
     }
 
-    // Solo las skins activas publicadas por el usuario
     public List<Skin> misVentasActivas(String username) {
         Usuario vendedor = usuarioService.obtenerPorUsername(username);
         return skinRepository.findByVendedorAndActivaTrue(vendedor);

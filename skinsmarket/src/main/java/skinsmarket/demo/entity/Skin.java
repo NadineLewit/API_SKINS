@@ -33,9 +33,12 @@ public class Skin {
     @JoinColumn(name = "categoria_id")
     private Categoria categoria;
 
-    private String rareza;
-    private String exterior;
-    private String coleccion;
+    @Enumerated(EnumType.STRING)
+    private Rareza rareza;
+
+    @Enumerated(EnumType.STRING)
+    private Exterior exterior;
+
     private Boolean stattrak = false;
     private Double descuento = 0.0;
 
@@ -44,4 +47,21 @@ public class Skin {
     @ManyToOne
     @JoinColumn(name = "vendedor_id")
     private Usuario vendedor;
+
+    public enum Rareza {
+        GRIS,
+        CELESTE,
+        AZUL,
+        VIOLETA,
+        ROSA,
+        ROJO
+    }
+
+    public enum Exterior {
+        RECIEN_FABRICADO,
+        CASI_NUEVO,
+        ALGO_DESGASTADO,
+        BASTANTE_DESGASTADO,
+        DEPLORABLE
+    }
 }
