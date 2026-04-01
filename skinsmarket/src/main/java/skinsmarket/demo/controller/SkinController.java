@@ -1,15 +1,17 @@
 package skinsmarket.demo.controller;
 
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.userdetails.UserDetails;
-import skinsmarket.demo.entity.Skin;
-import skinsmarket.demo.service.ISkinService;
-import skinsmarket.demo.service.SkinService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+import skinsmarket.demo.dto.SkinResponse;
+import skinsmarket.demo.entity.Skin;
+import skinsmarket.demo.service.ISkinService;
+
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @SecurityRequirement(name = "bearerAuth")
@@ -19,36 +21,34 @@ public class SkinController {
 
     private final ISkinService skinService;
 
-    // GET /skins — catálogo público, todas las skins activas
     @GetMapping
-    public List<Skin> listar() {
-        return skinService.listarActivas();
+    public ResponseEntity<List<SkinResponse>> listar() {
+        List<SkinResponse> skins = skinService.listarActivas().stream()
+                .map(SkinResponse::fromEntity)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(skins);
     }
 
-    // GET /skins/{id} — detalle de una skin
     @GetMapping("/{id}")
-    public ResponseEntity<Skin> obtener(@PathVariable Long id) {
-        return ResponseEntity.ok(skinService.obtenerPorId(id));
+    public ResponseEntity<SkinResponse> obtener(@PathVariable Long id) {
+        return ResponseEntity.ok(SkinResponse.fromEntity(skinService.obtenerPorId(id)));
     }
 
-    // POST /skins — publicar una skin (cualquier usuario autenticado puede vender)
     @PostMapping
-    public ResponseEntity<Skin> crear(
+    public ResponseEntity<SkinResponse> crear(
             @AuthenticationPrincipal UserDetails userDetails,
             @RequestBody Skin skin) {
-        return ResponseEntity.ok(skinService.crear(skin, userDetails.getUsername()));
+        return ResponseEntity.ok(SkinResponse.fromEntity(skinService.crear(skin, userDetails.getUsername())));
     }
 
-    // PUT /skins/{id} — editar una skin
     @PutMapping("/{id}")
-    public ResponseEntity<Skin> actualizar(
+    public ResponseEntity<SkinResponse> actualizar(
             @AuthenticationPrincipal UserDetails userDetails,
             @PathVariable Long id,
             @RequestBody Skin skin) {
-        return ResponseEntity.ok(skinService.actualizar(id, skin, userDetails.getUsername()));
+        return ResponseEntity.ok(SkinResponse.fromEntity(skinService.actualizar(id, skin, userDetails.getUsername())));
     }
 
-    // DELETE /skins/{id} — desactivar una skin (baja lógica)
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> desactivar(
             @AuthenticationPrincipal UserDetails userDetails,
@@ -57,15 +57,19 @@ public class SkinController {
         return ResponseEntity.noContent().build();
     }
 
-    // GET /skins/mis-ventas — ver todas las skins que publiqué
     @GetMapping("/mis-ventas")
-    public ResponseEntity<List<Skin>> misVentas(@AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(skinService.misVentas(userDetails.getUsername()));
+    public ResponseEntity<List<SkinResponse>> misVentas(@AuthenticationPrincipal UserDetails userDetails) {
+        List<SkinResponse> skins = skinService.misVentas(userDetails.getUsername()).stream()
+                .map(SkinResponse::fromEntity)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(skins);
     }
 
-    // GET /skins/mis-ventas/activas — ver solo las skins activas que publiqué
     @GetMapping("/mis-ventas/activas")
-    public ResponseEntity<List<Skin>> misVentasActivas(@AuthenticationPrincipal UserDetails userDetails) {
-        return ResponseEntity.ok(skinService.misVentasActivas(userDetails.getUsername()));
+    public ResponseEntity<List<SkinResponse>> misVentasActivas(@AuthenticationPrincipal UserDetails userDetails) {
+        List<SkinResponse> skins = skinService.misVentasActivas(userDetails.getUsername()).stream()
+                .map(SkinResponse::fromEntity)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(skins);
     }
 }

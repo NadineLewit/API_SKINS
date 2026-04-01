@@ -9,9 +9,8 @@ import org.springframework.web.bind.annotation.*;
 import skinsmarket.demo.dto.LoginRequest;
 import skinsmarket.demo.dto.LoginResponse;
 import skinsmarket.demo.dto.RegistroRequest;
-import skinsmarket.demo.entity.Usuario;
+import skinsmarket.demo.dto.UsuarioResponse;
 import skinsmarket.demo.service.IUsuarioService;
-import skinsmarket.demo.service.UsuarioService;
 
 @RestController
 @SecurityRequirement(name = "bearerAuth")
@@ -21,30 +20,26 @@ public class UsuarioController {
 
     private final IUsuarioService usuarioService;
 
-    // POST /usuarios/registro — crear cuenta nueva
     @PostMapping("/registro")
-    public ResponseEntity<Usuario> registrar(@RequestBody RegistroRequest request) {
-        return ResponseEntity.ok(usuarioService.registrar(request));
+    public ResponseEntity<UsuarioResponse> registrar(@RequestBody RegistroRequest request) {
+        return ResponseEntity.ok(UsuarioResponse.fromEntity(usuarioService.registrar(request)));
     }
 
-    // POST /usuarios/login — iniciar sesión, devuelve el token JWT
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@RequestBody LoginRequest request) {
         return ResponseEntity.ok(usuarioService.login(request));
     }
 
-    // GET /usuarios/me — ver mi perfil (requiere token)
     @GetMapping("/me")
-    public ResponseEntity<Usuario> miPerfil(@AuthenticationPrincipal UserDetails userDetails) {
-        Usuario usuario = usuarioService.obtenerPorUsername(userDetails.getUsername());
-        return ResponseEntity.ok(usuario);
+    public ResponseEntity<UsuarioResponse> miPerfil(@AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(UsuarioResponse.fromEntity(usuarioService.obtenerPorUsername(userDetails.getUsername())));
     }
-    // PUT /usuarios/me — actualizar mi perfil
+
     @PutMapping("/me")
-    public ResponseEntity<Usuario> actualizar(
+    public ResponseEntity<UsuarioResponse> actualizar(
             @AuthenticationPrincipal UserDetails userDetails,
             @RequestBody RegistroRequest request) {
-        return ResponseEntity.ok(usuarioService.actualizar(userDetails.getUsername(), request));
+        return ResponseEntity.ok(UsuarioResponse.fromEntity(usuarioService.actualizar(userDetails.getUsername(), request)));
     }
 
     @DeleteMapping("/me")
