@@ -1,14 +1,16 @@
 package skinsmarket.demo.controller;
 
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import skinsmarket.demo.entity.Skin;
 import skinsmarket.demo.service.ISkinService;
-import skinsmarket.demo.service.SkinService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.math.BigDecimal;
 import java.util.List;
 
 @RestController
@@ -19,10 +21,17 @@ public class SkinController {
 
     private final ISkinService skinService;
 
-    // GET /skins — catálogo público, todas las skins activas
+    // GET /skins — catálogo público, con filtros opcionales
+    // Ejemplo: GET /skins?nombre=ak&rareza=ROJO&exterior=CASI_NUEVO&precioMin=10&precioMax=500&categoriaId=1
     @GetMapping
-    public List<Skin> listar() {
-        return skinService.listarActivas();
+    public List<Skin> listar(
+            @RequestParam(required = false) String nombre,
+            @RequestParam(required = false) Skin.Rareza rareza,
+            @RequestParam(required = false) Skin.Exterior exterior,
+            @RequestParam(required = false) BigDecimal precioMin,
+            @RequestParam(required = false) BigDecimal precioMax,
+            @RequestParam(required = false) Long categoriaId) {
+        return skinService.listarConFiltros(nombre, rareza, exterior, precioMin, precioMax, categoriaId);
     }
 
     // GET /skins/{id} — detalle de una skin
@@ -31,20 +40,20 @@ public class SkinController {
         return ResponseEntity.ok(skinService.obtenerPorId(id));
     }
 
-    // POST /skins — publicar una skin (cualquier usuario autenticado puede vender)
+    // POST /skins — publicar una skin (requiere token)
     @PostMapping
     public ResponseEntity<Skin> crear(
             @AuthenticationPrincipal UserDetails userDetails,
-            @RequestBody Skin skin) {
+            @Valid @RequestBody Skin skin) {
         return ResponseEntity.ok(skinService.crear(skin, userDetails.getUsername()));
     }
 
-    // PUT /skins/{id} — editar una skin
+    // PUT /skins/{id} — editar una skin propia
     @PutMapping("/{id}")
     public ResponseEntity<Skin> actualizar(
             @AuthenticationPrincipal UserDetails userDetails,
             @PathVariable Long id,
-            @RequestBody Skin skin) {
+            @Valid @RequestBody Skin skin) {
         return ResponseEntity.ok(skinService.actualizar(id, skin, userDetails.getUsername()));
     }
 
