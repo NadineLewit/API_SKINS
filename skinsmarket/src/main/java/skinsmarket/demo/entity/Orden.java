@@ -23,7 +23,7 @@ public class Orden {
     private LocalDateTime fecha = LocalDateTime.now();
 
     @Enumerated(EnumType.STRING)
-    private Estado estado = Estado.FINALIZADA;
+    private Estado estado = Estado.PENDIENTE;
 
     private BigDecimal subtotal;
     private BigDecimal descuentoTotal;
@@ -33,6 +33,8 @@ public class Orden {
     private List<DetalleOrden> detalles = new ArrayList<>();
 
     public enum Estado {
-        FINALIZADA
+        PENDIENTE,
+        FINALIZADA,
+        CANCELADA
     }
 }

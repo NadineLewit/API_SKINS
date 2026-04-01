@@ -6,9 +6,10 @@ import skinsmarket.demo.entity.*;
 import skinsmarket.demo.exception.CuponInvalidoException;
 import skinsmarket.demo.exception.StockInsuficienteException;
 import skinsmarket.demo.repository.*;
+
 import java.math.BigDecimal;
 import java.util.List;
-//w
+
 @Service
 @RequiredArgsConstructor
 public class OrdenService implements IOrdenService {
@@ -18,8 +19,6 @@ public class OrdenService implements IOrdenService {
     private final SkinRepository skinRepository;
     private final CuponRepository cuponRepository;
     private final UsuarioService usuarioService;
-
-
 
     public Orden finalizarCompra(String username, String codigoCupon) {
         Usuario usuario = usuarioService.obtenerPorUsername(username);
@@ -33,6 +32,7 @@ public class OrdenService implements IOrdenService {
 
         Orden orden = new Orden();
         orden.setUsuario(usuario);
+        orden.setEstado(Orden.Estado.PENDIENTE);
         BigDecimal subtotal = BigDecimal.ZERO;
 
         for (ItemCarrito item : carrito.getItems()) {
@@ -69,11 +69,30 @@ public class OrdenService implements IOrdenService {
         orden.setSubtotal(subtotal);
         orden.setDescuentoTotal(descuento);
         orden.setTotal(subtotal.subtract(descuento));
+        orden.setEstado(Orden.Estado.FINALIZADA);
 
         carrito.getItems().clear();
         carrito.setEstado(Carrito.Estado.VACIO);
         carritoRepository.save(carrito);
 
+        return ordenRepository.save(orden);
+    }
+
+    public Orden cancelarOrden(Long id, String username) {
+        Orden orden = obtenerPorId(id);
+        if (!orden.getUsuario().getUsername().equals(username)) {
+            throw new RuntimeException("No tenés permiso para cancelar esta orden");
+        }
+        if (orden.getEstado() == Orden.Estado.FINALIZADA) {
+            throw new RuntimeException("No se puede cancelar una orden ya finalizada");
+        }
+        // Devolver stock
+        for (DetalleOrden detalle : orden.getDetalles()) {
+            Skin skin = detalle.getSkin();
+            skin.setStock(skin.getStock() + detalle.getCantidad());
+            skinRepository.save(skin);
+        }
+        orden.setEstado(Orden.Estado.CANCELADA);
         return ordenRepository.save(orden);
     }
 

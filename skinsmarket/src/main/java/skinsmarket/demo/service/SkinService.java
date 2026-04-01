@@ -6,7 +6,10 @@ import skinsmarket.demo.exception.SkinNoDisponibleException;
 import skinsmarket.demo.repository.SkinRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -19,29 +22,30 @@ public class SkinService implements ISkinService {
         return skinRepository.findByActivaTrue();
     }
 
+    public List<Skin> listarConFiltros(String nombre, Skin.Rareza rareza, Skin.Exterior exterior,
+                                       BigDecimal precioMin, BigDecimal precioMax, Long categoriaId) {
+        return skinRepository.findByActivaTrue().stream()
+                .filter(s -> nombre == null || s.getNombre().toLowerCase().contains(nombre.toLowerCase()))
+                .filter(s -> rareza == null || rareza.equals(s.getRareza()))
+                .filter(s -> exterior == null || exterior.equals(s.getExterior()))
+                .filter(s -> precioMin == null || s.getPrecio().compareTo(precioMin) >= 0)
+                .filter(s -> precioMax == null || s.getPrecio().compareTo(precioMax) <= 0)
+                .filter(s -> categoriaId == null || (s.getCategoria() != null && categoriaId.equals(s.getCategoria().getId())))
+                .collect(Collectors.toList());
+    }
+
     public Skin obtenerPorId(Long id) {
         return skinRepository.findById(id)
                 .orElseThrow(() -> new SkinNoDisponibleException());
     }
 
     public Skin crear(Skin skin, String username) {
-        if (skin.getNombre() == null || skin.getNombre().isBlank())
-            throw new RuntimeException("El nombre no puede estar vacío");
-        if (skin.getPrecio() == null || skin.getPrecio().doubleValue() <= 0)
-            throw new RuntimeException("El precio debe ser mayor a 0");
-        if (skin.getStock() == null || skin.getStock() < 0)
-            throw new RuntimeException("El stock no puede ser negativo");
-
         Usuario vendedor = usuarioService.obtenerPorUsername(username);
         skin.setVendedor(vendedor);
         return skinRepository.save(skin);
     }
 
     public Skin actualizar(Long id, Skin datos, String username) {
-        if (datos.getPrecio() != null && datos.getPrecio().doubleValue() <= 0)
-            throw new RuntimeException("El precio debe ser mayor a 0");
-        if (datos.getStock() != null && datos.getStock() < 0)
-            throw new RuntimeException("El stock no puede ser negativo");
         Skin skin = obtenerPorId(id);
         if (!skin.getVendedor().getUsername().equals(username))
             throw new RuntimeException("Solo el vendedor puede editar esta skin");
