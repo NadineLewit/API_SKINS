@@ -6,7 +6,6 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 /**
  * Excepción lanzada cuando se intenta crear o editar una skin con stock negativo.
  *
- * Idéntica al NegativeStockException del TPO aprobado.
  * Devuelve HTTP 400 Bad Request con el mensaje correspondiente.
  *
  * Lanzada en: SkinServiceImpl al validar el stock antes de persistir.

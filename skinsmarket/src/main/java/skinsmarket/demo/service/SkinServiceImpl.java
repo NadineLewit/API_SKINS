@@ -21,7 +21,6 @@ import java.util.List;
 /**
  * Implementación del servicio de Skins.
  *
- * Estructura idéntica al GameServiceImpl del TPO aprobado:
  * mismas validaciones (InfoValidator), mismo patrón @Transactional,
  * mismo uso de @Autowired. Solo se adaptan los campos al dominio de skins.
  *

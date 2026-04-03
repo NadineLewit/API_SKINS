@@ -6,7 +6,6 @@ import lombok.Data;
 /**
  * Entidad que representa el detalle de una línea dentro de una Orden de compra.
  *
- * Estructura idéntica al OrderDetail del TPO aprobado.
  * Representa cada skin comprada dentro de una orden, junto con la
  * cantidad adquirida y el precio unitario histórico (congelado al momento
  * de la compra, para que no cambie si el precio de la skin se actualiza después).

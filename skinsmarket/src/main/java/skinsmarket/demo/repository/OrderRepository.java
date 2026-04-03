@@ -9,7 +9,6 @@ import java.util.List;
 /**
  * Repositorio JPA para la entidad Order.
  *
- * Idéntico al OrderRepository del TPO aprobado.
  * Gestiona la persistencia de las órdenes de compra de skins.
  *
  * Hereda de JpaRepository los métodos estándar:

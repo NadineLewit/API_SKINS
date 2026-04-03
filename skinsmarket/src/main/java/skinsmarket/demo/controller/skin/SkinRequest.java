@@ -3,7 +3,6 @@ package skinsmarket.demo.controller.skin;
 import lombok.Data;
 
 /**
- * DTO (Data Transfer Object) para las solicitudes de creación y edición de Skins.
  *
  * Se utiliza en el SkinController para recibir datos del cliente sin exponer
  * directamente la entidad Skin.

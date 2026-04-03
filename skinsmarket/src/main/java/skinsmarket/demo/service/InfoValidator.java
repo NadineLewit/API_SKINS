@@ -5,7 +5,6 @@ import java.util.regex.Pattern;
 /**
  * Clase utilitaria con métodos estáticos de validación de datos de entrada.
  *
- * Idéntica al InfoValidator del TPO aprobado.
  * Centraliza las reglas de validación para evitar repetir lógica
  * en múltiples servicios (AuthenticationService, SkinServiceImpl, UserServiceImpl).
  *

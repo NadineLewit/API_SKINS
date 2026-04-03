@@ -5,7 +5,6 @@ import lombok.Data;
 /**
  * DTO de respuesta con los datos del perfil del usuario.
  *
- * Idéntico al UserResponse del TPO aprobado.
  * Expone solo los datos que el cliente necesita ver, sin exponer
  * información sensible como la contraseña hasheada o el rol interno.
  */

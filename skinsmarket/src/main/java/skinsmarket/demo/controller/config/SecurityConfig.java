@@ -23,12 +23,6 @@ import java.util.Arrays;
 /**
  * Configuración de seguridad de Spring Security para el marketplace de skins.
  *
- * Estructura idéntica al SecurityConfig del TPO aprobado.
- * Solo se modificaron las rutas para que coincidan con los nuevos controllers:
- *   - /games/**  → /skins/**
- *   - /wishlist/** → /carrito/**
- *   - Se agregaron rutas para /cupones/**
- *
  * Política de sesiones: STATELESS (sin estado de sesión en servidor, todo via JWT).
  */
 @Configuration

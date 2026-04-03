@@ -20,7 +20,7 @@ import skinsmarket.demo.service.SkinService;
 /**
  * Controlador REST para la gestión de Skins (artículos cosméticos de videojuegos).
  *
- * Sigue la misma estructura que GameController del TPO aprobado.
+
  * Rutas públicas: GET /skins/get/**
  * Rutas de admin: POST/PUT/DELETE /skins/admin/**
  * Rutas de usuario autenticado: POST /skins (publicar skin propia)

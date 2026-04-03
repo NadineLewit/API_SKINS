@@ -19,7 +19,6 @@ import lombok.RequiredArgsConstructor;
 /**
  * Controlador REST para la autenticación de usuarios.
  *
- * Idéntico al AuthenticationController del TPO aprobado.
  * Maneja el registro de nuevos usuarios y el inicio de sesión,
  * devolviendo un token JWT en ambos casos.
  *

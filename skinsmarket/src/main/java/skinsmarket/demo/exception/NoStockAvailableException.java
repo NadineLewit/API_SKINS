@@ -7,7 +7,6 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  * Excepción lanzada cuando no hay suficiente stock disponible para completar
  * la cantidad solicitada en una orden de compra.
  *
- * Idéntica al NoStockAvailableException del TPO aprobado.
  * Devuelve HTTP 400 Bad Request con el mensaje correspondiente.
  *
  * Lanzada en: OrderServiceImpl al validar el stock de cada skin

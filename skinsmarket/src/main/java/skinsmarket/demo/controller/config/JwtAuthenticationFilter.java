@@ -20,7 +20,6 @@ import lombok.RequiredArgsConstructor;
 /**
  * Filtro de autenticación JWT que se ejecuta una sola vez por request.
  *
- * Idéntico al JwtAuthenticationFilter del TPO aprobado.
  *
  * Funcionamiento (ejecutado en cada request HTTP):
  * 1. Extrae el token JWT del header "Authorization: Bearer <token>"

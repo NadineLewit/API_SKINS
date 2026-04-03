@@ -5,8 +5,6 @@ import lombok.Data;
 /**
  * DTO de respuesta para cada ítem dentro de una orden de compra.
  *
- * Misma estructura que OrderDetailResponse del TPO aprobado,
- * adaptado al dominio de skins (skinId en lugar de gameId).
  * Se usa para mostrar el detalle de cada skin comprada en la respuesta de la orden.
  */
 @Data

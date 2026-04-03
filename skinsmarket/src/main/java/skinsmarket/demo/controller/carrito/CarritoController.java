@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.*;
 /**
  * Controlador REST para la gestión del Carrito de compras.
  *
- * Reemplaza el WishlistController del TPO aprobado adaptándolo al dominio de skins.
  * El carrito permite al usuario agregar skins, modificar cantidades y vaciar el carrito
  * antes de finalizar la compra.
  *

@@ -7,8 +7,6 @@ import org.springframework.stereotype.Repository;
 /**
  * Repositorio JPA para la entidad ItemCarrito.
  *
- * Nuevo repositorio respecto al TPO aprobado (el carrito con ítems detallados
- * es una funcionalidad exclusiva del marketplace de skins).
  *
  * Hereda de JpaRepository todos los métodos necesarios para el CRUD de ítems:
  *   save()      → crear o actualizar un ítem (agregar skin, modificar cantidad)

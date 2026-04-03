@@ -6,8 +6,6 @@ import lombok.Data;
 /**
  * Entidad que representa un ítem (línea) dentro del Carrito de compras.
  *
- * Entidad nueva respecto al TPO aprobado (no existía Wishlist con ítems detallados).
- * Sigue la misma estructura que OrderDetail pero para el carrito pre-compra.
  *
  * Guarda la skin elegida, la cantidad deseada y el precio unitario
  * en el momento en que se agregó al carrito (snapshot de precio).

@@ -8,7 +8,6 @@ import lombok.NoArgsConstructor;
 /**
  * DTO para las solicitudes de autenticación (login).
  *
- * Idéntico al AuthenticationRequest del TPO aprobado.
  * Contiene las credenciales del usuario para iniciar sesión.
  */
 @Data

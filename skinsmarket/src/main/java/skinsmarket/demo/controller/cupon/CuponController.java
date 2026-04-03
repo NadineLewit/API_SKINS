@@ -12,7 +12,6 @@ import java.util.List;
 /**
  * Controlador REST para la gestión de Cupones de descuento.
  *
- * Funcionalidad exclusiva del marketplace de skins (no presente en el TPO aprobado).
  * Sigue la misma estructura de controllers del TPO aprobado.
  *
  * Los cupones permiten aplicar descuentos al finalizar una compra.

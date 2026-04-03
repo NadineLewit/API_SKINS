@@ -10,9 +10,6 @@ import java.util.List;
 /**
  * Repositorio JPA para la entidad Skin.
  *
- * Reemplaza el GameRepository del TPO aprobado, adaptando los métodos
- * al dominio de skins. Mantiene el mismo patrón de nombres de métodos
- * derivados (Spring Data JPA genera las queries automáticamente).
  *
  * Hereda de JpaRepository los métodos estándar:
  *   save(), findById(), findAll(), deleteById(), existsById(), etc.

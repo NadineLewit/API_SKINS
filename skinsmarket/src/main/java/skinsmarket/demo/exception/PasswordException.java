@@ -7,7 +7,6 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  * Excepción lanzada cuando la contraseña no cumple los requisitos mínimos
  * o las contraseñas ingresadas no coinciden entre sí.
  *
- * Idéntica al PasswordException del TPO aprobado.
  * Devuelve HTTP 400 Bad Request con el mensaje correspondiente.
  *
  * Requisitos validados en AuthenticationService.register():

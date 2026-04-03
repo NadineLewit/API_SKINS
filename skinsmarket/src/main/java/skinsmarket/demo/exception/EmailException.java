@@ -7,7 +7,6 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  * Excepción lanzada cuando el email ingresado no tiene un formato válido
  * o ya está en uso por otro usuario.
  *
- * Idéntica al EmailException del TPO aprobado.
  * Devuelve HTTP 400 Bad Request con el mensaje correspondiente.
  *
  * Lanzada en:

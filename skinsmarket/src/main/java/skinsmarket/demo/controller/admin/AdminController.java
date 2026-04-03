@@ -15,7 +15,6 @@ import java.util.stream.Collectors;
 /**
  * Controlador REST para las operaciones administrativas del marketplace de skins.
  *
- * Idéntico en estructura al AdminController del TPO aprobado.
  * Todas las rutas están protegidas y solo son accesibles por usuarios con rol ADMIN.
  *
  * Funcionalidades:

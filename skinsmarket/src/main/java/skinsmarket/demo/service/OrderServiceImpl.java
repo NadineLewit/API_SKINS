@@ -23,7 +23,6 @@ import java.util.List;
 /**
  * Implementación del servicio de Órdenes de compra.
  *
- * Estructura idéntica al OrderServiceImpl del TPO aprobado:
  * mismo patrón de construcción de la orden, mismo mapeo a DTO de respuesta,
  * misma gestión del stock. Se agregan:
  *   - Soporte de cupón de descuento (codigoCupon en OrderRequest)

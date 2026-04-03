@@ -10,16 +10,12 @@ import java.util.List;
 /**
  * Entidad que representa una Orden de compra de skins.
  *
- * Basada en la estructura del Order del TPO aprobado (mismas anotaciones,
- * mismos métodos auxiliares addOrderDetail/removeOrderDetail).
- * Se agregaron los campos de descuento para soportar cupones.
- *
  * Relaciones:
  *   - Muchas órdenes pertenecen a un usuario (ManyToOne → User)
  *   - Una orden tiene muchos detalles de compra (OneToMany → OrderDetail)
  *
  * Se usa @Table(name="orders") para evitar conflicto con la palabra reservada
- * ORDER en SQL (idéntico al TPO aprobado).
+ * ORDER en SQL
  */
 @Entity
 @Data

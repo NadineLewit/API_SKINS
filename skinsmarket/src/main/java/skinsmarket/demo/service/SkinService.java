@@ -11,8 +11,6 @@ import java.util.List;
 /**
  * Interfaz del servicio de Skins.
  *
- * Reemplaza la interfaz GameService del TPO aprobado, adaptando los métodos
- * al dominio de skins. Se mantiene el mismo patrón interfaz + implementación.
  */
 public interface SkinService {
 

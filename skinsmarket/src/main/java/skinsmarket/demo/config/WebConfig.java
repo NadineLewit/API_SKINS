@@ -7,7 +7,6 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 /**
  * Configuración de recursos estáticos para Spring MVC.
  *
- * Idéntica al WebConfig del TPO aprobado.
  * Permite que las imágenes de skins subidas al servidor sean accesibles
  * públicamente desde la URL /uploads/{filename}.
  *
@@ -19,7 +18,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  *     la carpeta local "uploads/" y genera la URL:
  *     http://localhost:4002/uploads/1234567890_dragon_lore.png
  *   - Esta URL es la que se almacena en Skin.imageUrl
- *   - El frontend la usa directamente para mostrar la imagen al usuario
+ *   - El frontend la va a usar directamente para mostrar la imagen al usuario
  *
  * La carpeta "uploads/" se crea automáticamente en la raíz del proyecto
  * (mismo nivel que src/ y pom.xml) cuando se sube la primera imagen.

@@ -5,7 +5,6 @@ import lombok.Data;
 /**
  * DTO para las solicitudes de actualización de perfil de usuario.
  *
- * Idéntico al UserRequest del TPO aprobado.
  * Todos los campos son opcionales en la request: solo se actualizan
  * los que no sean null (la validación se realiza en la capa de servicio).
  */

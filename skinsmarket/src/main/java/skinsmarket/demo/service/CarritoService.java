@@ -5,8 +5,6 @@ import skinsmarket.demo.entity.Carrito;
 /**
  * Interfaz del servicio de Carrito de compras.
  *
- * Reemplaza la interfaz WishlistService del TPO aprobado.
- * Sigue el mismo patrón interfaz + implementación del TPO.
  */
 public interface CarritoService {
 

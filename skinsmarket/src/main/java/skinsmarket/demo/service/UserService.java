@@ -10,7 +10,6 @@ import java.util.List;
 /**
  * Interfaz del servicio de Usuarios.
  *
- * Idéntica al UserService del TPO aprobado.
  * Define el contrato que implementa UserServiceImpl.
  */
 @Service

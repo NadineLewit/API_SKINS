@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.*;
 /**
  * Controlador REST para la gestión del perfil del usuario autenticado.
  *
- * Idéntico al UserController del TPO aprobado.
  * Permite a cada usuario ver y actualizar su propia información de perfil.
  *
  * Todas las rutas requieren autenticación.

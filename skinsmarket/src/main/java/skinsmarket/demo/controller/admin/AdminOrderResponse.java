@@ -11,7 +11,6 @@ import java.time.LocalDateTime;
 /**
  * DTO de respuesta para la vista de órdenes en el panel de administración.
  *
- * Idéntico al AdminOrderResponse del TPO aprobado.
  * Proporciona un resumen de cada orden de compra (sin exponer
  * detalles internos innecesarios).
  *

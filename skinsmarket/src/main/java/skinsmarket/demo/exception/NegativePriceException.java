@@ -6,7 +6,6 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 /**
  * Excepción lanzada cuando se intenta crear o editar una skin con precio negativo o cero.
  *
- * Idéntica al NegativePriceException del TPO aprobado.
  * Devuelve HTTP 400 Bad Request con el mensaje correspondiente.
  *
  * Lanzada en: SkinServiceImpl al validar el precio antes de persistir.

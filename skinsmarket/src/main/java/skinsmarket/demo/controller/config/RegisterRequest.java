@@ -8,8 +8,6 @@ import lombok.NoArgsConstructor;
 /**
  * DTO para las solicitudes de registro de nuevos usuarios.
  *
- * Contiene todos los campos requeridos por el TPO:
- * nombre de usuario, mail, contraseña, nombre y apellido.
  *
  * NOTA: La autenticación (login) se realiza por EMAIL aunque se pida
  * username en el registro, para simplificar el flujo del frontend.

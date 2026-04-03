@@ -5,7 +5,6 @@ import lombok.Data;
 /**
  * DTO para las solicitudes de creación de categorías.
  *
- * Idéntico al CategoryRequest del TPO aprobado.
  * Transporta únicamente el nombre de la categoría desde el cliente.
  */
 @Data

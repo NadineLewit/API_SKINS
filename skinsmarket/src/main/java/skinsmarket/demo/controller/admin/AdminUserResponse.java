@@ -6,7 +6,6 @@ import skinsmarket.demo.entity.Role;
 /**
  * DTO de respuesta para la vista de usuarios en el panel de administración.
  *
- * Idéntico al AdminUserResponse del TPO aprobado.
  * Expone los datos relevantes de cada usuario para que el administrador
  * pueda gestionar cuentas y roles sin acceder a información sensible
  * como contraseñas hasheadas.

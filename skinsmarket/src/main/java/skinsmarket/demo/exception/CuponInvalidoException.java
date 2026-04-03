@@ -6,8 +6,6 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 /**
  * Excepción lanzada cuando un cupón de descuento no es válido.
  *
- * Nueva excepción respecto al TPO aprobado (los cupones son una
- * funcionalidad exclusiva del marketplace de skins).
  *
  * Sigue la misma estructura que las excepciones del TPO aprobado:
  * extiende Exception y usa @ResponseStatus para el mapeo HTTP automático.

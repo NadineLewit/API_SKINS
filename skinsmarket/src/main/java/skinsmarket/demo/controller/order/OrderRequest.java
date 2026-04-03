@@ -5,9 +5,6 @@ import lombok.Data;
 import java.util.List;
 
 /**
- * DTO para las solicitudes de creación de órdenes de compra.
- *
- * Extiende el OrderRequest del TPO aprobado agregando soporte para cupón de descuento.
  * El cliente envía la lista de items de la orden y, opcionalmente, un código de cupón.
  */
 @Data

@@ -15,8 +15,6 @@ import java.util.List;
 /**
  * Controlador REST para la gestión de Órdenes de compra de skins.
  *
- * Sigue la misma estructura que el OrderController del TPO aprobado,
- * con la adición del soporte para cupones de descuento.
  *
  * Todas las rutas requieren autenticación (rol USER).
  * Ruta base: /order

@@ -16,9 +16,6 @@ import org.springframework.security.core.userdetails.UserDetails;
 /**
  * Entidad que representa a un usuario del marketplace de skins.
  *
- * Estructura idéntica al User del TPO aprobado.
- * Implementa UserDetails de Spring Security para integrarse con el sistema
- * de autenticación JWT sin necesidad de configuración extra.
  *
  * Relaciones:
  *   - Un usuario tiene muchas órdenes de compra (OneToMany → Order)

@@ -18,7 +18,6 @@ import lombok.RequiredArgsConstructor;
 /**
  * Configuración de la infraestructura de autenticación de Spring Security.
  *
- * Idéntica al ApplicationConfig del TPO aprobado.
  * Define los beans necesarios para que Spring Security pueda:
  *   - Cargar usuarios desde la base de datos (UserDetailsService)
  *   - Verificar contraseñas hasheadas (PasswordEncoder)

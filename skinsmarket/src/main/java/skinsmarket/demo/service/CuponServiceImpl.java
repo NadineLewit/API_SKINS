@@ -14,7 +14,6 @@ import java.util.List;
 /**
  * Implementación del servicio de Cupones de descuento.
  *
- * Nueva implementación respecto al TPO aprobado.
  * Usa @Autowired y @Transactional igual que los demás servicios del proyecto.
  *
  * La validación del cupón aplica tres reglas:

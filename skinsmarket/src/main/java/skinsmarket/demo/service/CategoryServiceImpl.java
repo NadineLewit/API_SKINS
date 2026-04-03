@@ -15,7 +15,6 @@ import java.util.List;
 /**
  * Implementación del servicio de Categorías de skins.
  *
- * Estructura idéntica al CategoryServiceImpl del TPO aprobado.
  * Se restaura la validación de duplicados (estaba comentada en el TPO)
  * para usar la excepción CategoryDuplicateException correctamente.
  *

@@ -7,7 +7,6 @@ import java.time.LocalDateTime;
 /**
  * DTO para las solicitudes de creación de Cupones de descuento.
  *
- * Sigue el mismo patrón de los DTOs de request del TPO aprobado.
  * Transporta los datos necesarios para crear un nuevo cupón.
  */
 @Data

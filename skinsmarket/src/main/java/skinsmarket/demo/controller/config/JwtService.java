@@ -18,7 +18,6 @@ import org.springframework.security.core.userdetails.UserDetails;
 /**
  * Servicio para la generación y validación de tokens JWT.
  *
- * Idéntico al JwtService del TPO aprobado.
  *
  * Responsabilidades:
  *   - Generar tokens JWT firmados con la clave secreta

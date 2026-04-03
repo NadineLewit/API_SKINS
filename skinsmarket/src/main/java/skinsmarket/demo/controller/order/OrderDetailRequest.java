@@ -5,8 +5,6 @@ import lombok.Data;
 /**
  * DTO para cada ítem dentro de una solicitud de orden.
  *
- * Misma estructura que OrderDetailRequest del TPO aprobado,
- * adaptado al dominio de skins (skinId en lugar de gameId).
  */
 @Data
 public class OrderDetailRequest {

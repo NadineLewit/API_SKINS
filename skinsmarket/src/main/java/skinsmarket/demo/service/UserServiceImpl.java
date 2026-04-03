@@ -19,7 +19,6 @@ import java.util.List;
 /**
  * Implementación del servicio de Usuarios.
  *
- * Idéntico al UserServiceImpl del TPO aprobado.
  * Gestiona actualización de perfil, cambio de roles y listado para el admin.
  *
  * Usa inyección por constructor con @RequiredArgsConstructor (Lombok),

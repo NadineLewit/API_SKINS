@@ -14,8 +14,6 @@ import java.util.List;
 /**
  * Interfaz del servicio de Órdenes de compra.
  *
- * Idéntica al OrderService del TPO aprobado con un método adicional
- * para obtener una orden por ID (usado en el OrderController).
  */
 public interface OrderService {
 

@@ -8,9 +8,6 @@ import java.time.LocalDateTime;
 /**
  * Entidad que representa una Skin (artículo cosmético de videojuego) en el marketplace.
  *
- * Reemplaza la entidad Game del TPO aprobado, manteniendo su estructura base
- * (id, price, discount, stock, imageUrl, category) y agregando atributos
- * propios del dominio de skins: rareza, exterior, stattrak, vendedor y estado activo.
  *
  * Relaciones:
  *   - Una skin pertenece a una categoría (ManyToOne → Category)

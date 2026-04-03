@@ -10,7 +10,6 @@ import java.util.List;
 /**
  * Repositorio JPA para la entidad Category.
  *
- * Idéntico al CategoryRepository del TPO aprobado.
  * Provee acceso a las categorías de skins almacenadas en la base de datos.
  *
  * Hereda de JpaRepository los métodos estándar:

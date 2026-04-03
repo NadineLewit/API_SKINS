@@ -8,9 +8,7 @@ import java.time.LocalDate;
 /**
  * Entidad que representa un Cupón de descuento.
  *
- * Entidad nueva respecto al TPO aprobado: el marketplace de skins agrega
- * la funcionalidad de cupones para promociones y descuentos especiales.
- * Sigue la misma estructura JPA de las demás entidades del proyecto.
+
  *
  * Un cupón tiene un código único, un porcentaje de descuento y puede tener
  * fecha de vencimiento. Puede ser de uso único o múltiple.

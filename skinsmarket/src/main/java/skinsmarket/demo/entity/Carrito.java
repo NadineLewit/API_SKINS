@@ -9,9 +9,6 @@ import java.util.List;
 /**
  * Entidad que representa el Carrito de compras de un usuario.
  *
- * Reemplaza la entidad Wishlist del TPO aprobado, con una lógica más completa:
- * en lugar de solo guardar una lista de skins deseadas, el carrito gestiona
- * ítems con cantidad y precio, listos para generar una orden de compra.
  *
  * Cada usuario tiene exactamente un carrito (relación OneToOne).
  * El carrito persiste entre sesiones: si el usuario cierra sesión y vuelve,

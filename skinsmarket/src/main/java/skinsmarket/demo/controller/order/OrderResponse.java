@@ -6,12 +6,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * DTO de respuesta para una orden de compra completa.
- *
- * Extiende el OrderResponse del TPO aprobado agregando:
- * - El descuento aplicado por cupón (si se usó uno)
- * - El precio final tras aplicar el descuento
- *
  * Este objeto es lo que recibe el cliente al crear o consultar una orden.
  */
 @Data

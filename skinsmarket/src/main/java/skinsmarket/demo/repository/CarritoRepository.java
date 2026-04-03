@@ -10,8 +10,7 @@ import java.util.Optional;
 /**
  * Repositorio JPA para la entidad Carrito.
  *
- * Reemplaza el WishlistRepository del TPO aprobado, con una consulta adicional
- * para obtener el carrito de un usuario específico.
+
  *
  * A diferencia de la Wishlist (que solo necesitaba CRUD básico), el Carrito
  * requiere buscar por usuario para implementar la lógica de "obtener o crear carrito"

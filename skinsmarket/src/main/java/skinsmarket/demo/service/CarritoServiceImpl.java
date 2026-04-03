@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service;
 /**
  * Implementación del servicio de Carrito de compras.
  *
- * Reemplaza WishlistServiceImpl del TPO aprobado con lógica más completa.
  * Usa @Autowired en atributos y @Transactional, igual que los servicios del TPO.
  *
  * Lógica principal: el carrito persiste entre sesiones. Cada usuario tiene

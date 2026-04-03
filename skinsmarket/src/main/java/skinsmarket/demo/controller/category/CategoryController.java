@@ -25,7 +25,6 @@ import skinsmarket.demo.controller.category.CategoryRequest;
  * Controlador REST para la gestión de Categorías de Skins.
  *
  * Las categorías permiten organizar las skins por tipo (ej: Rifle, Pistola, Cuchillo, Guante).
- * Estructura idéntica al CategoryController del TPO aprobado.
  *
  * Rutas públicas:    GET  /categories          (listar todas)
  * Rutas de admin:   POST /categories/create    (crear)

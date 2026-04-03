@@ -7,8 +7,6 @@ import lombok.NoArgsConstructor;
 /**
  * Entidad que representa una Categoría de skins.
  *
- * Estructura idéntica al Category del TPO aprobado.
- * Las categorías permiten organizar las skins por tipo de ítem dentro del juego.
  *
  * Ejemplos de categorías: Rifle, Pistola, Cuchillo, Guante, Subfusil.
  *

@@ -9,8 +9,6 @@ import java.util.Optional;
 /**
  * Repositorio JPA para la entidad Cupon.
  *
- * Nuevo repositorio respecto al TPO aprobado (los cupones de descuento
- * son una funcionalidad exclusiva del marketplace de skins).
  *
  * Hereda de JpaRepository los métodos estándar:
  *   save()       → crear un nuevo cupón

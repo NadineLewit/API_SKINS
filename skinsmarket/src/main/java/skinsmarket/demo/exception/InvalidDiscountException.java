@@ -6,7 +6,6 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 /**
  * Excepción lanzada cuando el descuento de una skin no está en el rango válido.
  *
- * Idéntica al InvalidDiscountException del TPO aprobado.
  * Devuelve HTTP 400 Bad Request con el mensaje correspondiente.
  *
  * Lanzada en: SkinServiceImpl al validar el descuento antes de persistir.

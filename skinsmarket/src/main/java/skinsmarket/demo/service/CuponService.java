@@ -9,8 +9,6 @@ import java.util.List;
 /**
  * Interfaz del servicio de Cupones de descuento.
  *
- * Nueva interfaz respecto al TPO aprobado.
- * Sigue el mismo patrón interfaz + implementación del TPO.
  */
 public interface CuponService {
 
