@@ -1,4 +1,4 @@
-package skinsmarket.demo.security;
+/*package skinsmarket.demo.security;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -7,8 +7,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
-import skinsmarket.demo.entity.Usuario;
-import skinsmarket.demo.repository.UsuarioRepository;
+import skinsmarket.demo.repository.UserRepository;
 
 import java.util.List;
 
@@ -16,11 +15,11 @@ import java.util.List;
 @RequiredArgsConstructor
 public class UsuarioDetailsService implements UserDetailsService {
 
-    private final UsuarioRepository usuarioRepository;
+    private final UserRepository usuarioRepository;
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        Usuario usuario = usuarioRepository.findByUsername(username)
+        User usuario = usuarioRepository.findByUsername(username)
                 .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado: " + username));
 
         return new User(
@@ -29,4 +28,4 @@ public class UsuarioDetailsService implements UserDetailsService {
                 List.of(new SimpleGrantedAuthority("ROLE_" + usuario.getRol().name()))
         );
     }
-}
+}*/

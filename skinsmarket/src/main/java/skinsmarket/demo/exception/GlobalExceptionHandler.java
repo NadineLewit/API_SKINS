@@ -1,4 +1,4 @@
-package skinsmarket.demo.exception;
+/* package skinsmarket.demo.exception;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -60,4 +60,4 @@ public class GlobalExceptionHandler {
     body.put("error", mensaje);
     return ResponseEntity.status(status).body(body);
   }
-}
+}*/

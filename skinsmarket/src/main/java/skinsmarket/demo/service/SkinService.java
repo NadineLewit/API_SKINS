@@ -1,82 +1,89 @@
 package skinsmarket.demo.service;
 
+import skinsmarket.demo.controller.skin.SkinRequest;
 import skinsmarket.demo.entity.Skin;
-import skinsmarket.demo.entity.Usuario;
-import skinsmarket.demo.exception.SkinNoDisponibleException;
-import skinsmarket.demo.repository.SkinRepository;
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
+import skinsmarket.demo.exception.InvalidDiscountException;
+import skinsmarket.demo.exception.NegativePriceException;
+import skinsmarket.demo.exception.NegativeStockException;
 
-import java.math.BigDecimal;
 import java.util.List;
-import java.util.stream.Collectors;
 
-@Service
-@RequiredArgsConstructor
-public class SkinService implements ISkinService {
+/**
+ * Interfaz del servicio de Skins.
+ *
+ * Reemplaza la interfaz GameService del TPO aprobado, adaptando los métodos
+ * al dominio de skins. Se mantiene el mismo patrón interfaz + implementación.
+ */
+public interface SkinService {
 
-    private final SkinRepository skinRepository;
-    private final UsuarioService usuarioService;
+    /** Obtiene una skin por su ID. */
+    Skin getSkinById(Long id);
 
-    public List<Skin> listarActivas() {
-        return skinRepository.findByActivaTrue();
-    }
+    /**
+     * Crea una nueva skin (ABM de admin).
+     * @throws NegativeStockException    si el stock es negativo
+     * @throws NegativePriceException    si el precio es <= 0
+     * @throws InvalidDiscountException  si el descuento está fuera de [0,1]
+     */
+    Skin createSkin(SkinRequest skinRequest)
+            throws NegativeStockException, NegativePriceException, InvalidDiscountException;
 
-    public List<Skin> listarConFiltros(String nombre, Skin.Rareza rareza, Skin.Exterior exterior,
-                                       BigDecimal precioMin, BigDecimal precioMax, Long categoriaId) {
-        return skinRepository.findByActivaTrue().stream()
-                .filter(s -> nombre == null || s.getNombre().toLowerCase().contains(nombre.toLowerCase()))
-                .filter(s -> rareza == null || rareza.equals(s.getRareza()))
-                .filter(s -> exterior == null || exterior.equals(s.getExterior()))
-                .filter(s -> precioMin == null || s.getPrecio().compareTo(precioMin) >= 0)
-                .filter(s -> precioMax == null || s.getPrecio().compareTo(precioMax) <= 0)
-                .filter(s -> categoriaId == null || (s.getCategoria() != null && categoriaId.equals(s.getCategoria().getId())))
-                .collect(Collectors.toList());
-    }
+    /**
+     * Edita una skin existente (ABM de admin).
+     * @throws NegativeStockException    si el stock es negativo
+     * @throws NegativePriceException    si el precio es <= 0
+     * @throws InvalidDiscountException  si el descuento está fuera de [0,1]
+     */
+    Skin editSkin(Long id, SkinRequest skinRequest)
+            throws NegativeStockException, NegativePriceException, InvalidDiscountException;
 
-    public Skin obtenerPorId(Long id) {
-        return skinRepository.findById(id)
-                .orElseThrow(() -> new SkinNoDisponibleException());
-    }
+    /**
+     * Baja lógica de una skin (active = false).
+     * @return true si la skin existía y fue desactivada, false si el ID no existe
+     */
+    boolean deleteSkin(Long id);
 
-    public Skin crear(Skin skin, String username) {
-        Usuario vendedor = usuarioService.obtenerPorUsername(username);
-        skin.setVendedor(vendedor);
-        return skinRepository.save(skin);
-    }
+    /** Devuelve todas las skins (activas e inactivas) para el panel de admin. */
+    List<Skin> getAllSkins();
 
-    public Skin actualizar(Long id, Skin datos, String username) {
-        Skin skin = obtenerPorId(id);
-        if (!skin.getVendedor().getUsername().equals(username))
-            throw new RuntimeException("Solo el vendedor puede editar esta skin");
-        skin.setNombre(datos.getNombre());
-        skin.setDescripcion(datos.getDescripcion());
-        skin.setPrecio(datos.getPrecio());
-        skin.setStock(datos.getStock());
-        skin.setImagenUrl(datos.getImagenUrl());
-        skin.setCategoria(datos.getCategoria());
-        skin.setRareza(datos.getRareza());
-        skin.setExterior(datos.getExterior());
-        skin.setStattrak(datos.getStattrak());
-        skin.setDescuento(datos.getDescuento());
-        return skinRepository.save(skin);
-    }
+    /** Devuelve solo las skins con stock > 0 y active = true para el catálogo público. */
+    List<Skin> getAllAvailableSkins();
 
-    public void desactivar(Long id, String username) {
-        Skin skin = obtenerPorId(id);
-        if (!skin.getVendedor().getUsername().equals(username))
-            throw new RuntimeException("Solo el vendedor puede desactivar esta skin");
-        skin.setActiva(false);
-        skinRepository.save(skin);
-    }
+    /** Filtra skins por nombre de categoría. */
+    List<Skin> getSkinsByCategory(String categoryName);
 
-    public List<Skin> misVentas(String username) {
-        Usuario vendedor = usuarioService.obtenerPorUsername(username);
-        return skinRepository.findByVendedor(vendedor);
-    }
+    /** Filtra skins por rango de precio [min, max]. */
+    List<Skin> findByRangePrice(Double min, Double max);
 
-    public List<Skin> misVentasActivas(String username) {
-        Usuario vendedor = usuarioService.obtenerPorUsername(username);
-        return skinRepository.findByVendedorAndActivaTrue(vendedor);
-    }
+    /** Filtra skins con precio <= max. */
+    List<Skin> findByPriceMax(Double max);
+
+    /** Filtra skins con precio >= min. */
+    List<Skin> findByPriceMin(Double min);
+
+    /** Busca skins cuyo nombre contenga el texto dado (case-insensitive). */
+    List<Skin> findByName(String name);
+
+    /** Devuelve las skins publicadas por un usuario (vendedor). */
+    List<Skin> getSkinsByOwner(String email);
+
+    /**
+     * Crea una skin asignando al usuario autenticado como vendedor.
+     * Equivalente a createSkin() pero con vendedor = usuario autenticado.
+     */
+    Skin createSkinAsVendedor(SkinRequest skinRequest, String email)
+            throws NegativeStockException, NegativePriceException, InvalidDiscountException;
+
+    /**
+     * Edita una skin solo si le pertenece al usuario autenticado.
+     * Lanza RuntimeException (403) si el usuario no es el vendedor de la skin.
+     */
+    Skin editSkinAsVendedor(Long id, SkinRequest skinRequest, String email)
+            throws NegativeStockException, NegativePriceException, InvalidDiscountException;
+
+    /**
+     * Baja lógica de una skin solo si le pertenece al usuario autenticado.
+     * @return true si se desactivó, false si el ID no existe
+     */
+    boolean deleteSkinAsVendedor(Long id, String email);
 }

@@ -1,34 +1,34 @@
 package skinsmarket.demo.service;
 
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
+import skinsmarket.demo.controller.cupon.CuponRequest;
 import skinsmarket.demo.entity.Cupon;
 import skinsmarket.demo.exception.CuponInvalidoException;
-import skinsmarket.demo.repository.CuponRepository;
+
 import java.util.List;
 
-@Service
-@RequiredArgsConstructor
-public class CuponService implements ICuponService{
+/**
+ * Interfaz del servicio de Cupones de descuento.
+ *
+ * Nueva interfaz respecto al TPO aprobado.
+ * Sigue el mismo patrón interfaz + implementación del TPO.
+ */
+public interface CuponService {
 
-    private final CuponRepository cuponRepository;
+    /**
+     * Valida si un cupón es aplicable (activo y no vencido).
+     * @throws CuponInvalidoException si el cupón no existe, está inactivo o vencido
+     */
+    Cupon validar(String codigo) throws CuponInvalidoException;
 
-    public Cupon validar(String codigo) {
-        Cupon cupon = cuponRepository.findByCodigo(codigo)
-                .orElseThrow(() -> new RuntimeException("Cupón no encontrado"));
-        if (!cupon.getActivo()) throw new CuponInvalidoException();
-        if (cupon.getFechaVencimiento() != null &&
-                cupon.getFechaVencimiento().isBefore(java.time.LocalDate.now())) {
-            throw new CuponInvalidoException();
-        }
-        return cupon;
-    }
+    /** Crea un nuevo cupón de descuento. */
+    Cupon crear(CuponRequest cuponRequest);
 
-    public Cupon crear(Cupon cupon) {
-        return cuponRepository.save(cupon);
-    }
+    /** Devuelve todos los cupones registrados. */
+    List<Cupon> listar();
 
-    public List<Cupon> listar() {
-        return cuponRepository.findAll();
-    }
+    /** Obtiene un cupón por su ID. */
+    Cupon obtenerPorId(Long id);
+
+    /** Elimina un cupón por su ID. */
+    void eliminar(Long id);
 }
