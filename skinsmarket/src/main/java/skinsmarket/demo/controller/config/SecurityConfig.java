@@ -88,6 +88,10 @@ public class SecurityConfig {
                         // Archivos de imagen subidos al servidor
                         .requestMatchers("/uploads/**").permitAll()
 
+                        .requestMatchers("/swagger-ui/**").permitAll()
+                        .requestMatchers("/swagger-ui.html").permitAll()
+                        .requestMatchers("/v3/api-docs/**").permitAll()
+
                         // ── Rutas exclusivas de ADMIN ───────────────────────────────────
                         // Gestión de categorías (crear, editar, eliminar)
                         .requestMatchers("/categories/**").hasAnyAuthority(Role.ADMIN.name())
@@ -133,28 +137,5 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /**
-     * Configuración de CORS (Cross-Origin Resource Sharing).
-     *
-     * Idéntica al TPO aprobado: permite requests desde el frontend en localhost:5173.
-     * En producción se debe reemplazar el origen por la URL real del frontend.
-     */
-    @Bean
-    CorsConfigurationSource corsConfigurationSource() {
-        CorsConfiguration configuration = new CorsConfiguration();
 
-        // Origen permitido: el frontend de React/Vue/etc corriendo en local
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:5173"));
-        // Métodos HTTP permitidos para operaciones CRUD completas
-        configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        // Permitir todos los headers (incluyendo Authorization para el JWT)
-        configuration.setAllowedHeaders(Arrays.asList("*"));
-        // Necesario para que el browser incluya cookies/credenciales en requests cross-origin
-        configuration.setAllowCredentials(true);
-
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        // Aplicar esta configuración a TODAS las rutas
-        source.registerCorsConfiguration("/**", configuration);
-        return source;
-    }
 }
