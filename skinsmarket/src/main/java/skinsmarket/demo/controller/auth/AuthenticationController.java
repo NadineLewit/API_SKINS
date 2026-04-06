@@ -45,7 +45,7 @@ public class AuthenticationController {
      * @throws EmailException    si el email ya está registrado o tiene formato inválido
      */
     @PostMapping("/register")
-    public ResponseEntity<RegistroResponse> register(
+    public ResponseEntity<AuthenticationResponse> register(
             @RequestBody skinsmarket.demo.controller.config.RegisterRequest request) throws PasswordException, EmailException {
         return ResponseEntity.ok(service.register(request));
     }

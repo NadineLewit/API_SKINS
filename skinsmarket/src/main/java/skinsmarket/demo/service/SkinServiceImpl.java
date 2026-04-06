@@ -170,12 +170,16 @@ public class SkinServiceImpl implements SkinService {
     }
 
     /**
-     * Devuelve todas las skins (activas e inactivas) para el panel de admin.
-     * Equivalente a getAllGames() del TPO aprobado.
+     * Devuelve skins para el panel de admin.
+     * Con includeInactive=false (default) solo muestra activas.
+     * Con includeInactive=true muestra todas incluidas las dadas de baja.
      */
     @Override
-    public List<Skin> getAllSkins() {
-        return skinRepository.findAll();
+    public List<Skin> getAllSkins(boolean includeInactive) {
+        if (includeInactive) {
+            return skinRepository.findAll();
+        }
+        return skinRepository.findByActiveTrue();
     }
 
     /**
@@ -196,6 +200,11 @@ public class SkinServiceImpl implements SkinService {
     @Override
     public List<Skin> getSkinsByCategory(String categoryName) {
         return skinRepository.findByCategory_Name(categoryName);
+    }
+
+    @Override
+    public List<Skin> getSkinsByCategoryId(Integer categoryId) {
+        return skinRepository.findByCategory_Id(categoryId);
     }
 
     /**
@@ -307,8 +316,13 @@ public class SkinServiceImpl implements SkinService {
 
         final Category finalCategory = category;
         return skinRepository.findById(id).map(skin -> {
-            // Verificar que el usuario autenticado sea el vendedor de la skin
-            if (skin.getVendedor() == null || !skin.getVendedor().getEmail().equals(email)) {
+            // Verificar propiedad: el usuario debe ser el vendedor O ser ADMIN.
+            // Si la skin no tiene vendedor (creada por admin), solo un ADMIN puede editarla.
+            User usuario = userRepository.findByEmail(email)
+                    .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado: " + email));
+            boolean esAdmin = usuario.getRole().name().equals("ADMIN");
+            boolean esVendedor = skin.getVendedor() != null && skin.getVendedor().getEmail().equals(email);
+            if (!esAdmin && !esVendedor) {
                 throw new RuntimeException("No tenés permiso para editar esta skin");
             }
             skin.setName(skinRequest.getName());
@@ -323,13 +337,17 @@ public class SkinServiceImpl implements SkinService {
     }
 
     /**
-     * Baja lógica de una skin solo si le pertenece al usuario autenticado.
+     * Baja lógica de una skin solo si le pertenece al usuario autenticado o si es ADMIN.
      */
     @Override
     @Transactional
     public boolean deleteSkinAsVendedor(Long id, String email) {
         return skinRepository.findById(id).map(skin -> {
-            if (skin.getVendedor() == null || !skin.getVendedor().getEmail().equals(email)) {
+            User usuario = userRepository.findByEmail(email)
+                    .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado: " + email));
+            boolean esAdmin = usuario.getRole().name().equals("ADMIN");
+            boolean esVendedor = skin.getVendedor() != null && skin.getVendedor().getEmail().equals(email);
+            if (!esAdmin && !esVendedor) {
                 throw new RuntimeException("No tenés permiso para eliminar esta skin");
             }
             skin.setActive(false);

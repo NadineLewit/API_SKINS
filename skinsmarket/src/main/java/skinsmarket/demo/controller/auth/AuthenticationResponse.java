@@ -7,9 +7,13 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * DTO de respuesta para el inicio de sesión (login).
+ * DTO de respuesta para login Y registro.
  *
- * Solo devuelve el token para reconstruir el usuario y demas en el front
+ * Solo devuelve el token JWT. El frontend puede decodificar el payload
+ * del token para obtener email, rol y cualquier otro claim sin hacer
+ * requests adicionales.
+ *
+ * Usado en: POST /api/v1/auth/authenticate y POST /api/v1/auth/register
  */
 @Data
 @Builder
@@ -17,7 +21,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class AuthenticationResponse {
 
-    // Token JWT - usar como: Authorization: Bearer <token> en cada request
     @JsonProperty("access_token")
     private String accessToken;
 }

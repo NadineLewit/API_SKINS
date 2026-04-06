@@ -24,6 +24,7 @@ import lombok.RequiredArgsConstructor;
 /**
  * Servicio de autenticación: registro e inicio de sesión con JWT.
  *
+ * Estructura idéntica al AuthenticationService del TPO aprobado.
  * Única diferencia: al registrar un usuario se crea un Carrito vacío
  * en lugar de una Wishlist (dominio de skins).
  *
@@ -42,14 +43,14 @@ public class AuthenticationService {
     /**
      * Registra un nuevo usuario en el marketplace de skins.
      *
-     * Devuelve RegistroResponse con token + datos del usuario para que el
+     * Devuelve AuthResponse con token + datos del usuario para que el
      * frontend no tenga que hacer un segundo request a /api/v1/users/me.
      * NO incluye el rol en la respuesta.
      *
      * @throws PasswordException si las contraseñas no cumplen los requisitos
      * @throws EmailException    si el email tiene formato inválido
      */
-    public RegistroResponse register(RegisterRequest request)
+    public AuthenticationResponse register(RegisterRequest request)
             throws PasswordException, EmailException {
 
         // 1. Validar contraseñas
@@ -89,14 +90,11 @@ public class AuthenticationService {
         carrito.setEstado(Carrito.Estado.VACIO);
         carritoRepository.save(carrito);
 
-        // 5. Generar token y devolver RegistroResponse con datos del usuario
+        // 5. Generar token y devolver solo el access_token
+        // El frontend decodifica el JWT para obtener email, username, rol, etc.
         String jwtToken = jwtService.generateToken(user);
-        return RegistroResponse.builder()
+        return AuthenticationResponse.builder()
                 .accessToken(jwtToken)
-                .username(user.getUsername())
-                .email(user.getEmail())
-                .firstName(user.getFirstName())
-                .lastName(user.getLastName())
                 .build();
     }
 
@@ -117,6 +115,8 @@ public class AuthenticationService {
         // Credenciales correctas: generar token y devolver datos básicos
         User user = userRepository.findByEmail(request.getEmail()).orElseThrow();
         String jwtToken = jwtService.generateToken(user);
+        // Generar token y devolver solo el access_token
+        jwtToken = jwtService.generateToken(user);
         return AuthenticationResponse.builder()
                 .accessToken(jwtToken)
                 .build();

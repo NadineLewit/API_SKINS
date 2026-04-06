@@ -17,10 +17,11 @@ import org.springframework.web.multipart.MultipartFile;
 import skinsmarket.demo.entity.Skin;
 import skinsmarket.demo.service.SkinService;
 
+
 /**
  * Controlador REST para la gestión de Skins (artículos cosméticos de videojuegos).
  *
-
+ * Sigue la misma estructura que GameController del TPO aprobado.
  * Rutas públicas: GET /skins/get/**
  * Rutas de admin: POST/PUT/DELETE /skins/admin/**
  * Rutas de usuario autenticado: POST /skins (publicar skin propia)
@@ -183,12 +184,17 @@ public class SkinController {
 
     /**
      * Devuelve todas las skins (incluyendo inactivas), para el panel de administración.
-     * GET /skins/admin
+     * GET /skins/admin?includeInactive=false  → solo activas (default)
+     * GET /skins/admin?includeInactive=true   → todas, incluyendo dadas de baja
+     *
+     * Después de un DELETE (baja lógica), la skin desaparece del listado por defecto.
+     * Para verla igual, pasar ?includeInactive=true
      * Solo accesible por usuarios con rol ADMIN.
      */
     @GetMapping("/admin")
-    public ResponseEntity<List<Skin>> getAllSkins() {
-        List<Skin> skins = skinService.getAllSkins();
+    public ResponseEntity<List<Skin>> getAllSkins(
+            @RequestParam(defaultValue = "false") boolean includeInactive) {
+        List<Skin> skins = skinService.getAllSkins(includeInactive);
         return ResponseEntity.ok(skins);
     }
 
@@ -224,13 +230,26 @@ public class SkinController {
 
     /**
      * Devuelve skins filtradas por categoría.
+     * Acepta id O nombre (o ambos, prioriza id si se pasan los dos).
+     *
+     * GET /skins/get/category?id=1
      * GET /skins/get/category?name=Cuchillos
+     * GET /skins/get/category?id=1&name=Cuchillos
+     *
      * Acceso público.
      */
     @GetMapping("/get/category")
-    public ResponseEntity<List<Skin>> getSkinsByCategory(@RequestParam String name) {
-        List<Skin> skins = skinService.getSkinsByCategory(name);
-        return ResponseEntity.ok(skins);
+    public ResponseEntity<List<Skin>> getSkinsByCategory(
+            @RequestParam(required = false) Integer id,
+            @RequestParam(required = false) String name) {
+
+        if (id != null) {
+            return ResponseEntity.ok(skinService.getSkinsByCategoryId(id));
+        }
+        if (name != null && !name.isBlank()) {
+            return ResponseEntity.ok(skinService.getSkinsByCategory(name));
+        }
+        return ResponseEntity.badRequest().build();
     }
 
     /**
@@ -292,8 +311,8 @@ public class SkinController {
     /**
      * Edita una skin propia del usuario autenticado (solo el vendedor puede editarla).
      * PUT /skins/{id}
-     *
-     * Lanza 403 si el usuario intenta editar una skin que no le pertenece.
+     * Un ADMIN puede editar cualquier skin independientemente del vendedor.
+     * Devuelve 403 si el usuario intenta editar una skin que no le pertenece.
      */
     @PutMapping("/{id}")
     public ResponseEntity<Skin> editarMiSkin(
@@ -301,29 +320,38 @@ public class SkinController {
             @PathVariable Long id,
             @RequestBody SkinRequest skinRequest)
             throws NegativeStockException, NegativePriceException, InvalidDiscountException {
-        Skin updated = skinService.editSkinAsVendedor(id, skinRequest, auth.getName());
-        if (updated != null) {
-            return ResponseEntity.ok(updated);
+        try {
+            Skin updated = skinService.editSkinAsVendedor(id, skinRequest, auth.getName());
+            if (updated != null) {
+                return ResponseEntity.ok(updated);
+            }
+            return ResponseEntity.notFound().build();
+        } catch (RuntimeException e) {
+            // El usuario no es el vendedor de esta skin
+            return ResponseEntity.status(403).build();
         }
-        return ResponseEntity.notFound().build();
     }
 
     /**
      * Elimina (baja lógica) una skin propia del usuario autenticado.
      * DELETE /skins/{id}
-     *
-     * Solo el vendedor que publicó la skin puede eliminarla.
-     * Lanza 403 si intenta eliminar una skin ajena.
+     * Un ADMIN puede eliminar cualquier skin independientemente del vendedor.
+     * Devuelve 403 si intenta eliminar una skin ajena.
      */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> eliminarMiSkin(
             Authentication auth,
             @PathVariable Long id) {
-        boolean deleted = skinService.deleteSkinAsVendedor(id, auth.getName());
-        if (!deleted) {
-            return ResponseEntity.notFound().build();
+        try {
+            boolean deleted = skinService.deleteSkinAsVendedor(id, auth.getName());
+            if (!deleted) {
+                return ResponseEntity.notFound().build();
+            }
+            return ResponseEntity.noContent().build();
+        } catch (RuntimeException e) {
+            // El usuario no es el vendedor de esta skin
+            return ResponseEntity.status(403).build();
         }
-        return ResponseEntity.noContent().build();
     }
 
     /**

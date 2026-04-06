@@ -39,6 +39,12 @@ public interface SkinRepository extends JpaRepository<Skin, Long> {
     List<Skin> findByActiveTrue();
 
     /**
+     * Devuelve todas las skins inactivas (dadas de baja lógica).
+     * Usado en el panel de admin con ?includeInactive=true
+     */
+    List<Skin> findByActiveFalse();
+
+    /**
      * Devuelve todas las skins de una categoría específica (búsqueda por nombre).
      *
      * Equivalente a findByCategories_Name del GameRepository del TPO aprobado.
@@ -48,6 +54,9 @@ public interface SkinRepository extends JpaRepository<Skin, Long> {
      * @return lista de skins que pertenecen a esa categoría
      */
     List<Skin> findByCategory_Name(String name);
+
+    /** Busca skins por ID de categoría. */
+    List<Skin> findByCategory_Id(Integer id);
 
     /**
      * Devuelve skins cuyo precio esté dentro del rango [min, max].

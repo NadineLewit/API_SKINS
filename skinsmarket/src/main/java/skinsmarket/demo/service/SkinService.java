@@ -41,14 +41,21 @@ public interface SkinService {
      */
     boolean deleteSkin(Long id);
 
-    /** Devuelve todas las skins (activas e inactivas) para el panel de admin. */
-    List<Skin> getAllSkins();
+    /**
+     * Devuelve skins para el panel de admin.
+     * @param includeInactive si true devuelve todas (activas + inactivas),
+     *                        si false solo las activas (comportamiento por defecto).
+     */
+    List<Skin> getAllSkins(boolean includeInactive);
 
     /** Devuelve solo las skins con stock > 0 y active = true para el catálogo público. */
     List<Skin> getAllAvailableSkins();
 
-    /** Filtra skins por nombre de categoría. */
+    /** Filtra skins por nombre de categoría (case-sensitive). */
     List<Skin> getSkinsByCategory(String categoryName);
+
+    /** Filtra skins por ID de categoría. */
+    List<Skin> getSkinsByCategoryId(Integer categoryId);
 
     /** Filtra skins por rango de precio [min, max]. */
     List<Skin> findByRangePrice(Double min, Double max);
