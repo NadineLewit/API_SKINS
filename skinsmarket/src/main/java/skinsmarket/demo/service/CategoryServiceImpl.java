@@ -15,21 +15,19 @@ import java.util.List;
 /**
  * Implementación del servicio de Categorías de skins.
  *
- * Se restaura la validación de duplicados (estaba comentada en el TPO)
- * para usar la excepción CategoryDuplicateException correctamente.
- *
- * Usa @Autowired en atributos (estilo del TPO aprobado).
+ * CAMBIOS (pedido por la profe):
+ *   - @Transactional agregado en createCategory y deleteCategory (atomicidad ACID).
+ *     editCategory ya lo tenía. Ahora todos los métodos de escritura son transaccionales.
  */
 @Service
 public class CategoryServiceImpl implements CategoryService {
 
-    // Repositorio inyectado por @Autowired (consistente con el TPO aprobado)
     @Autowired
     private CategoryRepository categoryRepository;
 
     /**
      * Devuelve todas las categorías paginadas.
-     * Delega directamente al repositorio JPA (findAll con Pageable).
+     * GET /categories?page=0&size=10
      */
     @Override
     public Page<Category> getCategories(PageRequest pageable) {
@@ -37,9 +35,8 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     /**
-     * Obtiene una categoría por su ID.
-     * Lanza IllegalArgumentException si no existe (Spring convierte a 500,
-     * idealmente se manejaría con una excepción propia en una versión futura).
+     * Obtiene una categoría por ID.
+     * Usa Optional con orElseThrow (pedido por la profe).
      */
     @Override
     public Category getCategoryById(Long id) {
@@ -48,18 +45,15 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     /**
-     * Crea una nueva categoría verificando que el nombre no esté duplicado.
+     * Crea una nueva categoría verificando que no haya duplicados.
      *
-     * Se restaura la validación de duplicados que estaba comentada en el TPO aprobado.
-     * Lanza CategoryDuplicateException si ya existe una categoría con el mismo nombre.
-     *
-     * @throws CategoryDuplicateException si el nombre ya existe en la base de datos
+     * @Transactional: si el save() falla, no queda ningún estado inconsistente (ACID).
+     * @throws CategoryDuplicateException si ya existe una categoría con el mismo nombre.
      */
     @Override
+    @Transactional
     public Category createCategory(String name) throws CategoryDuplicateException {
-        // Verificar duplicado ignorando mayúsculas/minúsculas.
-        // Sin esto, "Rifle" y "rifle" se crearían como dos categorías distintas,
-        // lo que confundiría los filtros de búsqueda del catálogo.
+        // Validar duplicado case-insensitive
         List<Category> existing = categoryRepository.findByNameIgnoreCase(name);
         if (!existing.isEmpty()) {
             throw new CategoryDuplicateException();
@@ -68,10 +62,12 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     /**
-     * Elimina una categoría por su ID.
-     * Delega directamente al repositorio.
+     * Elimina una categoría por ID.
+     *
+     * @Transactional: garantiza que la eliminación sea atómica.
      */
     @Override
+    @Transactional
     public void deleteCategory(Long id) {
         categoryRepository.deleteById(id);
     }
@@ -79,17 +75,15 @@ public class CategoryServiceImpl implements CategoryService {
     /**
      * Edita el nombre de una categoría existente.
      *
-     * Usa el patrón map().orElse(null) del TPO aprobado:
-     * si la categoría existe la actualiza, si no devuelve null
-     * (el controller devuelve 404 en ese caso).
+     * Usa Optional con map().orElse(null) — si no existe devuelve null
+     * y el controller responde 404.
      *
-     * @Transactional garantiza que el save() ocurra dentro de la misma transacción.
+     * @Transactional: garantiza que el update sea atómico.
      */
     @Override
     @Transactional
     public Category editCategory(Long id, Category categoryDetails) {
         return categoryRepository.findById(id).map(category -> {
-            // Solo actualizamos el nombre (único campo editable)
             category.setName(categoryDetails.getName());
             return categoryRepository.save(category);
         }).orElse(null);

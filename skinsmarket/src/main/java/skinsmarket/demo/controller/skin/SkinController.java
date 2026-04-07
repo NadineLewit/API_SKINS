@@ -1,14 +1,12 @@
 package skinsmarket.demo.controller.skin;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.List;
 
 import skinsmarket.demo.exception.InvalidDiscountException;
 import skinsmarket.demo.exception.NegativePriceException;
 import skinsmarket.demo.exception.NegativeStockException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
@@ -17,31 +15,32 @@ import org.springframework.web.multipart.MultipartFile;
 import skinsmarket.demo.entity.Skin;
 import skinsmarket.demo.service.SkinService;
 
-
 /**
- * Controlador REST para la gestión de Skins (artículos cosméticos de videojuegos).
+ * Controlador REST para Skins.
  *
- * Sigue la misma estructura que GameController del TPO aprobado.
- * Rutas públicas: GET /skins/get/**
- * Rutas de admin: POST/PUT/DELETE /skins/admin/**
- * Rutas de usuario autenticado: POST /skins (publicar skin propia)
+ * CAMBIO (pedido por la profe):
+ *   - Los endpoints de imagen ahora reciben MultipartFile y almacenan
+ *     los bytes como BLOB en la BD (antes guardaban el archivo en disco).
+ *   - La respuesta incluye imageBase64 que el frontend usa directamente.
+ *
+ * Uso en frontend:
+ *   <img src={`data:image/jpeg;base64,${skin.imageBase64}`} />
  */
 @RestController
 @RequestMapping("skins")
 public class SkinController {
 
-    // Inyección del servicio de skins mediante @Autowired (consistente con el TPO aprobado)
     @Autowired
     private SkinService skinService;
 
-    // -------------------------------------------------------------------------
+    // =========================================================================
     // ENDPOINTS DE ADMINISTRADOR
-    // -------------------------------------------------------------------------
+    // =========================================================================
 
     /**
-     * Crea una skin desde el panel de administración (sin imagen).
+     * Crea una skin sin imagen desde el panel de admin.
      * POST /skins/admin/create
-     * Solo accesible por usuarios con rol ADMIN.
+     * Body: JSON con los datos de la skin.
      */
     @PostMapping("/admin/create")
     public ResponseEntity<Skin> createSkin(@RequestBody SkinRequest skinRequest)
@@ -51,52 +50,31 @@ public class SkinController {
     }
 
     /**
-     * Crea una skin con imagen desde el panel de administración.
+     * Crea una skin con imagen desde el panel de admin.
      * POST /skins/admin/create-with-image
-     * Recibe multipart/form-data con los campos de la skin y el archivo de imagen.
-     * Solo accesible por usuarios con rol ADMIN.
+     *
+     * Recibe multipart/form-data:
+     *   - "skin": JSON con los datos (como RequestPart)
+     *   - "image": archivo de imagen (como MultipartFile)
+     *
+     * La imagen se guarda como BLOB en la BD y se devuelve en base64.
+     *
+     * Ejemplo HTML (para el front):
+     *   <form enctype="multipart/form-data">
+     *     <input type="file" name="image" />
+     *   </form>
      */
-    @PostMapping("/admin/create-with-image")
+    @PostMapping(value = "/admin/create-with-image",
+                 consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> createSkinWithImage(
-            @RequestParam("name") String name,
-            @RequestParam("price") Double price,
-            @RequestParam("stock") Integer stock,
-            @RequestParam("game") String game,
-            @RequestParam("categoryId") Long categoryId,
-            @RequestParam("imagen") MultipartFile imagen
-    ) {
+            @RequestPart("skin") SkinRequest skinRequest,
+            @RequestPart(value = "image", required = false) MultipartFile image)
+            throws NegativeStockException, NegativePriceException, InvalidDiscountException {
         try {
-            // 1. Guardar la imagen en la carpeta local de uploads
-            String uploadDir = "uploads/";
-            Files.createDirectories(Paths.get(uploadDir));
-
-            String originalName = imagen.getOriginalFilename();
-            // Sanitizar el nombre del archivo para evitar caracteres peligrosos
-            String safeOriginal = (originalName == null) ? "file"
-                    : originalName.replaceAll("[^a-zA-Z0-9._-]", "_");
-            String fileName = System.currentTimeMillis() + "_" + safeOriginal;
-            Path filePath = Paths.get(uploadDir + fileName);
-            Files.write(filePath, imagen.getBytes());
-
-            // 2. Construir la URL pública de la imagen (URL-encoded para evitar problemas con espacios)
-            String encoded = java.net.URLEncoder
-                    .encode(fileName, java.nio.charset.StandardCharsets.UTF_8.toString())
-                    .replace("+", "%20");
-            String imagenUrl = "http://localhost:4002/uploads/" + encoded;
-
-            // 3. Armar el SkinRequest con todos los datos recibidos
-            SkinRequest skinRequest = new SkinRequest();
-            skinRequest.setName(name);
-            skinRequest.setPrice(price);
-            skinRequest.setStock(stock);
-            skinRequest.setGame(game);
-            skinRequest.setCategoryId(categoryId);
-            skinRequest.setImageUrl(imagenUrl);
-
-            // 4. Delegar la creación al servicio
-            Skin result = skinService.createSkin(skinRequest);
+            // Convertir MultipartFile a byte[] para almacenar en la BD como BLOB
+            byte[] imageBytes = (image != null && !image.isEmpty()) ? image.getBytes() : null;
+            Skin result = skinService.createSkinWithImage(skinRequest, imageBytes);
             return ResponseEntity.ok(result);
-
         } catch (Exception e) {
             return ResponseEntity.internalServerError()
                     .body("Error al crear la skin: " + e.getMessage());
@@ -104,63 +82,38 @@ public class SkinController {
     }
 
     /**
-     * Edita una skin existente (sin imagen) desde el panel de administración.
-     * PUT /skins/admin/{id}
-     * Solo accesible por usuarios con rol ADMIN.
+     * Edita una skin existente sin imagen.
+     * PUT /skins/admin/edit/{id}
      */
-    @PutMapping("/admin/{id}")
+    @PutMapping("/admin/edit/{id}")
     public ResponseEntity<Skin> editSkin(@PathVariable Long id,
                                          @RequestBody SkinRequest skinRequest)
             throws NegativeStockException, NegativePriceException, InvalidDiscountException {
-        Skin updatedSkin = skinService.editSkin(id, skinRequest);
-        if (updatedSkin != null) {
-            return ResponseEntity.ok(updatedSkin);
-        } else {
-            // Si no se encontró la skin, devolvemos 404
-            return ResponseEntity.notFound().build();
-        }
+        Skin updated = skinService.editSkin(id, skinRequest);
+        if (updated != null) return ResponseEntity.ok(updated);
+        return ResponseEntity.notFound().build();
     }
 
     /**
-     * Edita una skin con imagen desde el panel de administración.
-     * PUT /skins/admin/{id}/edit-with-image
-     * Recibe multipart/form-data con JSON de la skin y el nuevo archivo de imagen.
-     * Solo accesible por usuarios con rol ADMIN.
+     * Edita una skin con imagen nueva.
+     * PUT /skins/admin/edit/{id}/with-image
+     *
+     * Recibe multipart/form-data:
+     *   - "skin": JSON con los datos actualizados
+     *   - "image": nuevo archivo de imagen
      */
-    @PutMapping(value = "/admin/{id}/edit-with-image",
-            consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PutMapping(value = "/admin/edit/{id}/with-image",
+                consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<?> editSkinWithImage(
             @PathVariable Long id,
-            @RequestPart("skin") String skinJson,
-            @RequestPart("image") MultipartFile image
-    ) {
+            @RequestPart("skin") SkinRequest skinRequest,
+            @RequestPart(value = "image", required = false) MultipartFile image)
+            throws NegativeStockException, NegativePriceException, InvalidDiscountException {
         try {
-            // Guardar la nueva imagen en la carpeta de uploads
-            String uploadDir = "uploads/";
-            Files.createDirectories(Paths.get(uploadDir));
-
-            String originalName = image.getOriginalFilename();
-            String safeOriginal = (originalName == null) ? "file"
-                    : originalName.replaceAll("[^a-zA-Z0-9._-]", "_");
-            String fileName = System.currentTimeMillis() + "_" + safeOriginal;
-            Path filePath = Paths.get(uploadDir + fileName);
-            Files.write(filePath, image.getBytes());
-
-            String encoded = java.net.URLEncoder
-                    .encode(fileName, java.nio.charset.StandardCharsets.UTF_8.toString())
-                    .replace("+", "%20");
-            String imageUrl = "http://localhost:4002/uploads/" + encoded;
-
-            // Parsear el JSON de la skin y setear la nueva URL de imagen
-            com.fasterxml.jackson.databind.ObjectMapper mapper =
-                    new com.fasterxml.jackson.databind.ObjectMapper();
-            SkinRequest skinRequest = mapper.readValue(skinJson, SkinRequest.class);
-            skinRequest.setImageUrl(imageUrl);
-
-            Skin updated = skinService.editSkin(id, skinRequest);
+            byte[] imageBytes = (image != null && !image.isEmpty()) ? image.getBytes() : null;
+            Skin updated = skinService.editSkinWithImage(id, skinRequest, imageBytes);
             if (updated != null) return ResponseEntity.ok(updated);
             return ResponseEntity.notFound().build();
-
         } catch (Exception e) {
             return ResponseEntity.internalServerError()
                     .body("Error al editar la skin: " + e.getMessage());
@@ -168,151 +121,100 @@ public class SkinController {
     }
 
     /**
-     * Elimina (baja lógica) una skin desde el panel de administración.
-     * DELETE /skins/admin/{id}
-     * Devuelve 204 si se desactivó correctamente, 404 si el ID no existe.
-     * Solo accesible por usuarios con rol ADMIN.
+     * Baja lógica de una skin (active=false).
+     * DELETE /skins/admin/delete/{id}
      */
-    @DeleteMapping("/admin/{id}")
+    @DeleteMapping("/admin/delete/{id}")
     public ResponseEntity<Void> deleteSkin(@PathVariable Long id) {
         boolean deleted = skinService.deleteSkin(id);
-        if (!deleted) {
-            return ResponseEntity.notFound().build();
-        }
+        if (!deleted) return ResponseEntity.notFound().build();
         return ResponseEntity.noContent().build();
     }
 
     /**
-     * Devuelve todas las skins (incluyendo inactivas), para el panel de administración.
-     * GET /skins/admin?includeInactive=false  → solo activas (default)
-     * GET /skins/admin?includeInactive=true   → todas, incluyendo dadas de baja
-     *
-     * Después de un DELETE (baja lógica), la skin desaparece del listado por defecto.
-     * Para verla igual, pasar ?includeInactive=true
-     * Solo accesible por usuarios con rol ADMIN.
+     * Lista todas las skins (con o sin inactivas) para el panel admin.
+     * GET /skins/admin/all?includeInactive=false
      */
-    @GetMapping("/admin")
+    @GetMapping("/admin/all")
     public ResponseEntity<List<Skin>> getAllSkins(
             @RequestParam(defaultValue = "false") boolean includeInactive) {
-        List<Skin> skins = skinService.getAllSkins(includeInactive);
-        return ResponseEntity.ok(skins);
+        return ResponseEntity.ok(skinService.getAllSkins(includeInactive));
     }
 
-    // -------------------------------------------------------------------------
-    // ENDPOINTS PÚBLICOS (accesibles sin autenticación)
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // ENDPOINTS PÚBLICOS
+    // =========================================================================
 
-    /**
-     * Devuelve una skin por su ID.
-     * GET /skins/get/{id}
-     * Acceso público.
-     */
+    /** GET /skins/get/{id} — público */
     @GetMapping("/get/{id}")
     public ResponseEntity<Skin> getSkinById(@PathVariable Long id) {
         Skin skin = skinService.getSkinById(id);
-        if (skin != null) {
-            return ResponseEntity.ok(skin);
-        } else {
-            return ResponseEntity.notFound().build();
-        }
+        if (skin != null) return ResponseEntity.ok(skin);
+        return ResponseEntity.notFound().build();
     }
 
-    /**
-     * Devuelve todas las skins activas (disponibles para compra).
-     * GET /skins/get/available
-     * Acceso público.
-     */
-    @GetMapping("/get/available")
+    /** GET /skins/get/all — catálogo público (activas con stock) */
+    @GetMapping("/get/all")
     public ResponseEntity<List<Skin>> getAllAvailableSkins() {
-        List<Skin> skins = skinService.getAllAvailableSkins();
-        return ResponseEntity.ok(skins);
+        return ResponseEntity.ok(skinService.getAllAvailableSkins());
     }
 
     /**
-     * Devuelve skins filtradas por categoría.
-     * Acepta id O nombre (o ambos, prioriza id si se pasan los dos).
-     *
      * GET /skins/get/category?id=1
-     * GET /skins/get/category?name=Cuchillos
-     * GET /skins/get/category?id=1&name=Cuchillos
-     *
-     * Acceso público.
+     * GET /skins/get/category?name=Rifle
      */
     @GetMapping("/get/category")
     public ResponseEntity<List<Skin>> getSkinsByCategory(
             @RequestParam(required = false) Integer id,
             @RequestParam(required = false) String name) {
-
-        if (id != null) {
-            return ResponseEntity.ok(skinService.getSkinsByCategoryId(id));
-        }
-        if (name != null && !name.isBlank()) {
-            return ResponseEntity.ok(skinService.getSkinsByCategory(name));
-        }
+        if (id != null)                    return ResponseEntity.ok(skinService.getSkinsByCategoryId(id));
+        if (name != null && !name.isBlank()) return ResponseEntity.ok(skinService.getSkinsByCategory(name));
         return ResponseEntity.badRequest().build();
     }
 
-    /**
-     * Devuelve skins filtradas por rango de precio.
-     * GET /skins/get/price?min=5&max=100
-     * Parámetros opcionales: si solo se pasa min o max, filtra en una sola dirección.
-     * Acceso público.
-     */
+    /** GET /skins/get/price?min=10&max=100 */
     @GetMapping("/get/price")
     public ResponseEntity<List<Skin>> getSkinsByPrice(
             @RequestParam(required = false) Double min,
             @RequestParam(required = false) Double max) {
-
-        if (min != null && max != null) {
-            return ResponseEntity.ok(skinService.findByRangePrice(min, max));
-        } else if (max != null) {
-            return ResponseEntity.ok(skinService.findByPriceMax(max));
-        } else if (min != null) {
-            return ResponseEntity.ok(skinService.findByPriceMin(min));
-        } else {
-            // Si no se pasa ningún parámetro, la request es inválida
-            return ResponseEntity.badRequest().build();
-        }
+        if (min != null && max != null) return ResponseEntity.ok(skinService.findByRangePrice(min, max));
+        if (max != null)                return ResponseEntity.ok(skinService.findByPriceMax(max));
+        if (min != null)                return ResponseEntity.ok(skinService.findByPriceMin(min));
+        return ResponseEntity.badRequest().build();
     }
 
-    /**
-     * Devuelve skins filtradas por nombre (búsqueda parcial).
-     * GET /skins/get/name?name=Dragon
-     * Acceso público.
-     */
-    @GetMapping("/get/name")
+    /** GET /skins/get/search?name=AK */
+    @GetMapping("/get/search")
     public ResponseEntity<List<Skin>> getSkinsByName(@RequestParam String name) {
         return ResponseEntity.ok(skinService.findByName(name));
     }
 
-    // -------------------------------------------------------------------------
-    // ENDPOINTS DE VENDEDOR (accesibles por cualquier USER autenticado)
-    // El TPO dice: "Los usuarios registrados como vendedores podrán realizar
-    // el alta de una publicación de su producto y gestionarla".
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // ENDPOINTS DE VENDEDOR (USER autenticado)
+    // =========================================================================
 
     /**
-     * Publica una nueva skin (cualquier usuario autenticado puede vender).
+     * Publica una nueva skin. El vendedor se asigna del token JWT.
      * POST /skins
-     *
-     * El sistema registra automáticamente al usuario autenticado como vendedor.
-     * Valida precio, stock y descuento igual que el endpoint de admin.
      */
     @PostMapping
     public ResponseEntity<Skin> publicarSkin(
             Authentication auth,
             @RequestBody SkinRequest skinRequest)
             throws NegativeStockException, NegativePriceException, InvalidDiscountException {
-        // Setear el email del vendedor en el request para que el service lo asigne
         Skin result = skinService.createSkinAsVendedor(skinRequest, auth.getName());
         return ResponseEntity.ok(result);
     }
 
+    /** GET /skins/mis-skins — skins propias del usuario autenticado */
+    @GetMapping("/mis-skins")
+    public ResponseEntity<List<Skin>> misSkins(Authentication auth) {
+        return ResponseEntity.ok(skinService.getSkinsByOwner(auth.getName()));
+    }
+
     /**
-     * Edita una skin propia del usuario autenticado (solo el vendedor puede editarla).
+     * Edita una skin propia. Solo el vendedor o un ADMIN puede hacerlo.
      * PUT /skins/{id}
-     * Un ADMIN puede editar cualquier skin independientemente del vendedor.
-     * Devuelve 403 si el usuario intenta editar una skin que no le pertenece.
      */
     @PutMapping("/{id}")
     public ResponseEntity<Skin> editarMiSkin(
@@ -322,48 +224,25 @@ public class SkinController {
             throws NegativeStockException, NegativePriceException, InvalidDiscountException {
         try {
             Skin updated = skinService.editSkinAsVendedor(id, skinRequest, auth.getName());
-            if (updated != null) {
-                return ResponseEntity.ok(updated);
-            }
+            if (updated != null) return ResponseEntity.ok(updated);
             return ResponseEntity.notFound().build();
         } catch (RuntimeException e) {
-            // El usuario no es el vendedor de esta skin
             return ResponseEntity.status(403).build();
         }
     }
 
     /**
-     * Elimina (baja lógica) una skin propia del usuario autenticado.
+     * Baja lógica de una skin propia.
      * DELETE /skins/{id}
-     * Un ADMIN puede eliminar cualquier skin independientemente del vendedor.
-     * Devuelve 403 si intenta eliminar una skin ajena.
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminarMiSkin(
-            Authentication auth,
-            @PathVariable Long id) {
+    public ResponseEntity<Void> eliminarMiSkin(Authentication auth, @PathVariable Long id) {
         try {
             boolean deleted = skinService.deleteSkinAsVendedor(id, auth.getName());
-            if (!deleted) {
-                return ResponseEntity.notFound().build();
-            }
+            if (!deleted) return ResponseEntity.notFound().build();
             return ResponseEntity.noContent().build();
         } catch (RuntimeException e) {
-            // El usuario no es el vendedor de esta skin
             return ResponseEntity.status(403).build();
         }
-    }
-
-    /**
-     * Devuelve todas las skins publicadas por el usuario autenticado.
-     * GET /skins/mis-skins
-     * Requiere autenticación (rol USER o ADMIN).
-     */
-    @GetMapping("/mis-skins")
-    public ResponseEntity<List<Skin>> misSkins(Authentication auth) {
-        // Obtenemos el email del usuario autenticado desde el contexto de seguridad
-        String email = auth.getName();
-        List<Skin> skins = skinService.getSkinsByOwner(email);
-        return ResponseEntity.ok(skins);
     }
 }
