@@ -37,4 +37,13 @@ public interface OrderService {
 
     /** Devuelve todas las órdenes del sistema (para el panel de admin). */
     List<Order> findAllOrders();
+
+    /**
+     * Elimina una orden de compra del usuario autenticado.
+     * Lanza IllegalArgumentException si la orden no existe o no le pertenece al usuario.
+     *
+     * @param orderId ID de la orden a eliminar
+     * @param user    usuario autenticado que solicita la eliminación
+     */
+    void deleteOrder(Long orderId, User user);
 }

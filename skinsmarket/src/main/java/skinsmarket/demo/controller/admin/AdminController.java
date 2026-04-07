@@ -4,7 +4,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import skinsmarket.demo.entity.Cupon;
 import skinsmarket.demo.entity.Order;
+import skinsmarket.demo.service.CuponService;
 import skinsmarket.demo.service.UserService;
 import skinsmarket.demo.service.OrderService;
 
@@ -36,6 +38,9 @@ public class AdminController {
 
     // Inyección del servicio de órdenes para acceder a todas las compras del sistema
     private final OrderService orderService;
+
+    // Inyección del servicio de cupones para acceder a los cupones por ID
+    private final CuponService cuponService;
 
     // -------------------------------------------------------------------------
     // GESTIÓN DE USUARIOS
@@ -72,6 +77,29 @@ public class AdminController {
     public ResponseEntity<List<AdminUserResponse>> getAllUsers() {
         List<AdminUserResponse> users = userService.getAllUsers();
         return ResponseEntity.ok(users);
+    }
+
+    // -------------------------------------------------------------------------
+    // GESTIÓN DE CUPONES
+    // -------------------------------------------------------------------------
+
+    /**
+     * Busca un cupón específico por su ID.
+     * GET /api/v1/admin/cupones/{id}
+     *
+     * Solo accesible por ADMIN.
+     * Devuelve 200 OK con el cupón si existe, o 404 Not Found si no se encuentra.
+     *
+     * @param id ID del cupón a buscar
+     */
+    @GetMapping("/cupones/{id}")
+    public ResponseEntity<Cupon> getCuponById(@PathVariable Long id) {
+        try {
+            Cupon cupon = cuponService.obtenerPorId(id);
+            return ResponseEntity.ok(cupon);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     // -------------------------------------------------------------------------

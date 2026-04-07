@@ -31,4 +31,10 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
      * @return lista de órdenes del usuario, de más reciente a más antigua
      */
     List<Order> findByUserIdOrderByDateDesc(Long userId);
+
+    /**
+     * Verifica si existe una orden con ese ID que pertenezca al usuario dado.
+     * Se usa para validar que el usuario solo pueda eliminar sus propias órdenes.
+     */
+    boolean existsByIdAndUserId(Long id, Long userId);
 }

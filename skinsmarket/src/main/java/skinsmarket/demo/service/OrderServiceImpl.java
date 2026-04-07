@@ -5,7 +5,6 @@ import skinsmarket.demo.controller.order.OrderDetailResponse;
 import skinsmarket.demo.controller.order.OrderRequest;
 import skinsmarket.demo.controller.order.OrderResponse;
 import skinsmarket.demo.entity.*;
-import skinsmarket.demo.exception.CuponInvalidoException;
 import skinsmarket.demo.exception.NoStockAvailableException;
 import skinsmarket.demo.exception.PropietarioSkinException;
 import skinsmarket.demo.repository.CuponRepository;
@@ -48,6 +47,28 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public List<Order> findAllOrders() {
         return orderRepository.findAll();
+    }
+
+    /**
+     * Elimina una orden de compra verificando que pertenezca al usuario autenticado.
+     *
+     * Flujo:
+     *   1. Verificar que la orden exista y pertenezca al usuario (existsByIdAndUserId)
+     *   2. Si no le pertenece o no existe → lanzar IllegalArgumentException (HTTP 400)
+     *   3. Si le pertenece → eliminar con deleteById
+     *
+     * @param orderId ID de la orden a eliminar
+     * @param user    usuario autenticado (solo puede eliminar sus propias órdenes)
+     * @throws IllegalArgumentException si la orden no existe o no pertenece al usuario
+     */
+    @Override
+    @Transactional
+    public void deleteOrder(Long orderId, User user) {
+        if (!orderRepository.existsByIdAndUserId(orderId, user.getId())) {
+            throw new IllegalArgumentException(
+                    "Orden no encontrada o no pertenece al usuario: " + orderId);
+        }
+        orderRepository.deleteById(orderId);
     }
 
     /**

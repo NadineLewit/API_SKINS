@@ -92,4 +92,31 @@ public class OrderController {
             return ResponseEntity.notFound().build();
         }
     }
+
+    /**
+     * Elimina una orden de compra del usuario autenticado.
+     * DELETE /order/{id}
+     *
+     * El usuario solo puede eliminar sus propias órdenes.
+     * Devuelve 204 No Content si se eliminó correctamente.
+     * Devuelve 404 Not Found si la orden no existe o no le pertenece al usuario.
+     *
+     * @param id ID de la orden a eliminar
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteOrder(
+            Authentication auth,
+            @PathVariable Long id) {
+
+        String email = auth.getName();
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalStateException("Usuario no encontrado"));
+
+        try {
+            orderService.deleteOrder(id, user);
+            return ResponseEntity.noContent().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
 }
