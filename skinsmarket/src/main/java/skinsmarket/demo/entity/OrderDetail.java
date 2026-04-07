@@ -1,5 +1,6 @@
 package skinsmarket.demo.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 
@@ -28,6 +29,7 @@ public class OrderDetail {
     // FK: order_id referencia a la tabla orders
     @ManyToOne
     @JoinColumn(name = "order_id")
+    @JsonIgnore
     private Order order;
 
     // Skin comprada en esta línea de detalle

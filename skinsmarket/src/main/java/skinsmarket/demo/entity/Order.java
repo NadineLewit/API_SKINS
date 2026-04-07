@@ -1,5 +1,6 @@
 package skinsmarket.demo.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 
@@ -31,6 +32,7 @@ public class Order {
     // FK: user_id referencia a la tabla users
     @ManyToOne
     @JoinColumn(name = "user_id")
+    @JsonIgnore
     private User user;
 
     // Fecha y hora en que se creó la orden

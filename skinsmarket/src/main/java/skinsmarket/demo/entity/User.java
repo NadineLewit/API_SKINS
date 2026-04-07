@@ -1,10 +1,12 @@
 package skinsmarket.demo.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
 
 import java.util.Collection;
 import java.util.List;
@@ -63,6 +65,7 @@ public class User implements UserDetails {
     // Lista de órdenes de compra realizadas por el usuario
     // mappedBy indica que Order es el dueño de la relación (tiene la FK user_id)
     @OneToMany(mappedBy = "user")
+    @JsonIgnore
     private List<Order> orders;
 
     // Rol del usuario en el sistema: USER (comprador) o ADMIN
