@@ -1,5 +1,6 @@
 package skinsmarket.demo.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import skinsmarket.demo.controller.skin.SkinRequest;
 import skinsmarket.demo.entity.Category;
 import skinsmarket.demo.entity.Skin;
@@ -18,14 +19,6 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * Implementación del servicio de Skins.
- *
- * CAMBIOS (pedido por la profe):
- *   - createSkinWithImage / editSkinWithImage: nuevos métodos que reciben byte[]
- *     y los almacenan como BLOB en la BD (antes se guardaba en disco con imageUrl).
- *   - Se refuerza el uso de Optional y Streams según la profe.
- */
 @Service
 public class SkinServiceImpl implements SkinService {
 
@@ -39,10 +32,9 @@ public class SkinServiceImpl implements SkinService {
     private UserRepository userRepository;
 
     // =========================================================================
-    // CRUD base
+    // CRUD base — TODOS requieren imagen
     // =========================================================================
 
-    /** Busca por ID usando Optional — lanza excepción si no existe. */
     @Override
     public Skin getSkinById(Long id) {
         return skinRepository.findById(id)
@@ -50,20 +42,8 @@ public class SkinServiceImpl implements SkinService {
     }
 
     /**
-     * Crea skin sin imagen (admin).
-     * @Transactional: si algo falla, no queda stock descontado ni categoría asignada a medias.
-     */
-    @Override
-    @Transactional
-    public Skin createSkin(SkinRequest skinRequest)
-            throws NegativeStockException, NegativePriceException, InvalidDiscountException {
-        return buildAndSaveSkin(skinRequest, null, null);
-    }
-
-    /**
-     * Crea skin con imagen almacenada como BLOB en la BD (pedido por la profe).
-     *
-     * @param imageBytes bytes del archivo recibido como multipart/form-data
+     * Crea skin con imagen BLOB obligatoria (admin).
+     * Si no hay imagen lanza RuntimeException → 400 Bad Request.
      */
     @Override
     @Transactional
@@ -72,27 +52,17 @@ public class SkinServiceImpl implements SkinService {
         return buildAndSaveSkin(skinRequest, null, imageBytes);
     }
 
-    /** Edita skin sin imagen. */
-    @Override
-    @Transactional
-    public Skin editSkin(Long id, SkinRequest skinRequest)
-            throws NegativeStockException, NegativePriceException, InvalidDiscountException {
-        return updateSkin(id, skinRequest, null, false);
-    }
-
     /**
-     * Edita skin actualizando también la imagen BLOB.
-     *
-     * @param imageBytes nuevos bytes de imagen; si es null, la imagen no se modifica
+     * Edita skin actualizando la imagen BLOB obligatoria.
      */
     @Override
     @Transactional
     public Skin editSkinWithImage(Long id, SkinRequest skinRequest, byte[] imageBytes)
             throws NegativeStockException, NegativePriceException, InvalidDiscountException {
-        return updateSkin(id, skinRequest, imageBytes, true);
+        return updateSkin(id, skinRequest, imageBytes);
     }
 
-    /** Baja lógica: active=false. Devuelve false si el ID no existe. */
+    /** Baja lógica: active=false. */
     @Override
     @Transactional
     public boolean deleteSkin(Long id) {
@@ -104,7 +74,7 @@ public class SkinServiceImpl implements SkinService {
     }
 
     // =========================================================================
-    // Listados y filtros (usan Streams — pedido por la profe)
+    // Listados y filtros
     // =========================================================================
 
     @Override
@@ -113,10 +83,6 @@ public class SkinServiceImpl implements SkinService {
         return skinRepository.findByActiveTrue();
     }
 
-    /**
-     * Catálogo público: solo activas con stock > 0.
-     * Usa Stream + filter (pedido por la profe).
-     */
     @Override
     public List<Skin> getAllAvailableSkins() {
         return skinRepository.findByActiveTrue()
@@ -163,24 +129,24 @@ public class SkinServiceImpl implements SkinService {
     }
 
     // =========================================================================
-    // Endpoints de vendedor (USER autenticado)
+    // Endpoints de vendedor
     // =========================================================================
 
     @Override
     @Transactional
-    public Skin createSkinAsVendedor(SkinRequest skinRequest, String email)
+    public Skin createSkinAsVendedor(SkinRequest skinRequest, String email, byte[] imageBytes)
             throws NegativeStockException, NegativePriceException, InvalidDiscountException {
         User vendedor = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado: " + email));
-        return buildAndSaveSkin(skinRequest, vendedor, null);
+        return buildAndSaveSkin(skinRequest, vendedor, imageBytes);
     }
 
     @Override
     @Transactional
-    public Skin editSkinAsVendedor(Long id, SkinRequest skinRequest, String email)
+    public Skin editSkinAsVendedor(Long id, SkinRequest skinRequest, String email, byte[] imageBytes)
             throws NegativeStockException, NegativePriceException, InvalidDiscountException {
-
         validarDatos(skinRequest);
+        validarImagen(imageBytes);
         Category category = resolverCategoria(skinRequest);
         final Category finalCategory = category;
 
@@ -194,6 +160,7 @@ public class SkinServiceImpl implements SkinService {
                 throw new RuntimeException("No tenés permiso para editar esta skin");
             }
             aplicarCampos(skin, skinRequest, finalCategory);
+            skin.setImage(imageBytes);
             return skinRepository.save(skin);
         }).orElse(null);
     }
@@ -221,11 +188,12 @@ public class SkinServiceImpl implements SkinService {
     // =========================================================================
 
     /**
-     * Construye y guarda una skin nueva con sus datos, vendedor e imagen.
-     * Centraliza la lógica para no repetir código en create/createWithImage/createAsVendedor.
+     * Construye y guarda una skin. La imagen es OBLIGATORIA.
+     * Lanza RuntimeException si no se provee imagen.
      */
     private Skin buildAndSaveSkin(SkinRequest req, User vendedor, byte[] imageBytes)
             throws NegativeStockException, NegativePriceException, InvalidDiscountException {
+        validarImagen(imageBytes);
         validarDatos(req);
         Category category = resolverCategoria(req);
         double discount = req.getDiscount() != null ? req.getDiscount() : 0.0;
@@ -241,33 +209,32 @@ public class SkinServiceImpl implements SkinService {
         skin.setActive(true);
         skin.setFechaAlta(LocalDateTime.now());
         skin.setVendedor(vendedor);
-        skin.setImage(imageBytes);        // BLOB — null si no se sube imagen
+        skin.setImage(imageBytes);
 
         return skinRepository.save(skin);
     }
 
-    /**
-     * Actualiza campos de una skin existente.
-     *
-     * @param updateImage si true, actualiza el campo image con imageBytes;
-     *                    si false, deja la imagen existente sin tocar.
-     */
-    private Skin updateSkin(Long id, SkinRequest req, byte[] imageBytes, boolean updateImage)
+    private Skin updateSkin(Long id, SkinRequest req, byte[] imageBytes)
             throws NegativeStockException, NegativePriceException, InvalidDiscountException {
+        validarImagen(imageBytes);
         validarDatos(req);
         Category category = resolverCategoria(req);
         final Category finalCategory = category;
 
         return skinRepository.findById(id).map(skin -> {
             aplicarCampos(skin, req, finalCategory);
-            if (updateImage) {
-                skin.setImage(imageBytes);
-            }
+            skin.setImage(imageBytes);
             return skinRepository.save(skin);
         }).orElse(null);
     }
 
-    /** Valida stock, precio y descuento. Lanza excepción si alguno es inválido. */
+    /** Valida que la imagen no sea null ni vacía. */
+    private void validarImagen(byte[] imageBytes) {
+        if (imageBytes == null || imageBytes.length == 0) {
+            throw new RuntimeException("La imagen es obligatoria para crear o editar una skin");
+        }
+    }
+
     private void validarDatos(SkinRequest req)
             throws NegativeStockException, NegativePriceException, InvalidDiscountException {
         if (!InfoValidator.isValidStock(req.getStock()))   throw new NegativeStockException();
@@ -276,7 +243,6 @@ public class SkinServiceImpl implements SkinService {
         if (!InfoValidator.isValidDiscount(d))             throw new InvalidDiscountException();
     }
 
-    /** Busca la categoría por ID usando Optional. */
     private Category resolverCategoria(SkinRequest req) {
         if (req.getCategoryId() == null) return null;
         return categoryRepository.findById(req.getCategoryId().longValue())
@@ -284,7 +250,6 @@ public class SkinServiceImpl implements SkinService {
                         "Categoría inexistente: " + req.getCategoryId()));
     }
 
-    /** Aplica los campos del request a la entidad skin existente. */
     private void aplicarCampos(Skin skin, SkinRequest req, Category category) {
         double discount = req.getDiscount() != null ? req.getDiscount() : 0.0;
         skin.setName(req.getName());

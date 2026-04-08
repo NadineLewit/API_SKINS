@@ -12,18 +12,10 @@ public interface SkinService {
 
     Skin getSkinById(Long id);
 
-    // Sin imagen
-    Skin createSkin(SkinRequest skinRequest)
-            throws NegativeStockException, NegativePriceException, InvalidDiscountException;
-
-    // Con imagen BLOB (nuevo — pedido por la profe)
+    // Todos requieren imagen obligatoria
     Skin createSkinWithImage(SkinRequest skinRequest, byte[] imageBytes)
             throws NegativeStockException, NegativePriceException, InvalidDiscountException;
 
-    Skin editSkin(Long id, SkinRequest skinRequest)
-            throws NegativeStockException, NegativePriceException, InvalidDiscountException;
-
-    // Con imagen BLOB (nuevo — pedido por la profe)
     Skin editSkinWithImage(Long id, SkinRequest skinRequest, byte[] imageBytes)
             throws NegativeStockException, NegativePriceException, InvalidDiscountException;
 
@@ -39,10 +31,11 @@ public interface SkinService {
     List<Skin> findByName(String name);
     List<Skin> getSkinsByOwner(String email);
 
-    Skin createSkinAsVendedor(SkinRequest skinRequest, String email)
+    // Vendedor — imagen obligatoria
+    Skin createSkinAsVendedor(SkinRequest skinRequest, String email, byte[] imageBytes)
             throws NegativeStockException, NegativePriceException, InvalidDiscountException;
 
-    Skin editSkinAsVendedor(Long id, SkinRequest skinRequest, String email)
+    Skin editSkinAsVendedor(Long id, SkinRequest skinRequest, String email, byte[] imageBytes)
             throws NegativeStockException, NegativePriceException, InvalidDiscountException;
 
     boolean deleteSkinAsVendedor(Long id, String email);
