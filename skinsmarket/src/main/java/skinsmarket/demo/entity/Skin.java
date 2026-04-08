@@ -47,7 +47,7 @@ public class Skin {
     private LocalDateTime fechaAlta = LocalDateTime.now();
 
     // -------------------------------------------------------------------------
-    // Imagen almacenada como BLOB en la BD (pedido de la profe)
+    // Imagen almacenada como BLOB en la BD
     // -------------------------------------------------------------------------
 
     /**
