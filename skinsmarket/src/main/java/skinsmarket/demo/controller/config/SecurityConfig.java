@@ -87,6 +87,7 @@ public class SecurityConfig {
                 .requestMatchers("/error/**").permitAll()
                 // Catálogo público: listar categorías sin autenticarse
                 .requestMatchers("/categories").permitAll()
+
                 // Catálogo público: ver skins disponibles y filtros
                 .requestMatchers("/skins/get/**").permitAll()
                 // Archivos de imagen subidos al servidor

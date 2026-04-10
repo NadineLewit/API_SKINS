@@ -1,7 +1,10 @@
 package skinsmarket.demo.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 
 /**
  * Entidad que representa un ítem (línea) dentro del Carrito de compras.
@@ -27,6 +30,7 @@ public class ItemCarrito {
     // Carrito al que pertenece este ítem
     // FK: carrito_id referencia a la tabla carritos
     @ManyToOne
+    @JsonIgnore
     @JoinColumn(name = "carrito_id")
     private Carrito carrito;
 
