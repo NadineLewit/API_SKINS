@@ -1,5 +1,6 @@
 package skinsmarket.demo.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 
@@ -31,6 +32,7 @@ public class Carrito {
     // Dueño del carrito: cada usuario tiene exactamente uno
     // unique = true garantiza la relación uno a uno a nivel de BD
     @OneToOne
+    @JsonIgnore
     @JoinColumn(name = "user_id", unique = true)
     private User user;
 

@@ -7,9 +7,11 @@ import skinsmarket.demo.controller.order.OrderResponse;
 import skinsmarket.demo.entity.*;
 import skinsmarket.demo.exception.NoStockAvailableException;
 import skinsmarket.demo.exception.PropietarioSkinException;
+import skinsmarket.demo.repository.CarritoRepository;
 import skinsmarket.demo.repository.CuponRepository;
 import skinsmarket.demo.repository.OrderRepository;
 import skinsmarket.demo.repository.SkinRepository;
+import skinsmarket.demo.repository.UserRepository;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -19,15 +21,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Implementación del servicio de Órdenes de compra.
- *
- * mismo patrón de construcción de la orden, mismo mapeo a DTO de respuesta,
- * misma gestión del stock. Se agregan:
- *   - Soporte de cupón de descuento (codigoCupon en OrderRequest)
- *   - skinId en lugar de gameId en los detalles
- *   - Campos descuentoAplicado y totalFinal en la respuesta
- */
 @Service
 public class OrderServiceImpl implements OrderService {
 
@@ -40,78 +33,63 @@ public class OrderServiceImpl implements OrderService {
     @Autowired
     private CuponRepository cuponRepository;
 
-    /**
-     * Devuelve todas las órdenes del sistema (para el panel de admin).
-     * Equivalente al findAllOrders() del TPO aprobado.
-     */
-    @Override
-    public List<Order> findAllOrders() {
-        return orderRepository.findAll();
-    }
+    @Autowired
+    private CarritoRepository carritoRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    // =========================================================================
+    // Crear orden desde carrito (nuevo)
+    // =========================================================================
 
     /**
-     * Elimina una orden de compra verificando que pertenezca al usuario autenticado.
+     * Crea una orden de compra directamente desde el carrito del usuario.
      *
      * Flujo:
-     *   1. Verificar que la orden exista y pertenezca al usuario (existsByIdAndUserId)
-     *   2. Si no le pertenece o no existe → lanzar IllegalArgumentException (HTTP 400)
-     *   3. Si le pertenece → eliminar con deleteById
+     *   1. Busca el usuario por email (del JWT)
+     *   2. Busca su carrito y valida que no esté vacío
+     *   3. Convierte los ítems del carrito a OrderDetailRequest
+     *   4. Delega en createOrder() reutilizando toda la lógica existente
      *
-     * @param orderId ID de la orden a eliminar
-     * @param user    usuario autenticado (solo puede eliminar sus propias órdenes)
-     * @throws IllegalArgumentException si la orden no existe o no pertenece al usuario
+     * Ventaja: el frontend no necesita mandar el body — solo el token y el cupón opcional.
      */
     @Override
     @Transactional
-    public void deleteOrder(Long orderId, User user) {
-        if (!orderRepository.existsByIdAndUserId(orderId, user.getId())) {
-            throw new IllegalArgumentException(
-                    "Orden no encontrada o no pertenece al usuario: " + orderId);
+    public OrderResponse createOrderFromCarrito(String email, String codigoCupon)
+            throws NoStockAvailableException, PropietarioSkinException {
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        Carrito carrito = carritoRepository.findByUser(user)
+                .orElseThrow(() -> new RuntimeException("El usuario no tiene carrito"));
+
+        if (carrito.getItems() == null || carrito.getItems().isEmpty()) {
+            throw new RuntimeException("El carrito está vacío");
         }
-        orderRepository.deleteById(orderId);
+
+        // Convertir items del carrito a la estructura que espera createOrder()
+        List<OrderDetailRequest> items = carrito.getItems().stream()
+                .map(item -> {
+                    OrderDetailRequest d = new OrderDetailRequest();
+                    d.setSkinId(item.getSkin().getId());
+                    d.setQuantity(item.getCantidad());
+                    return d;
+                }).toList();
+
+        OrderRequest orderRequest = new OrderRequest();
+        orderRequest.setItemList(items);
+        orderRequest.setCodigoCupon(codigoCupon);
+
+        // Reutiliza toda la lógica de validación, descuento de stock y cupón
+        return createOrder(user, orderRequest);
     }
 
-    /**
-     * Devuelve el historial de órdenes del usuario autenticado.
-     *
-     * Mismo patrón de mapeo que el TPO aprobado (for loop + setters manuales).
-     * Adaptado: skinId en lugar de gameId, se añade descuentoAplicado y totalFinal.
-     */
-    @Override
-    public List<OrderResponse> getOrdersForUser(User user) {
-        List<Order> orders = orderRepository.findByUserIdOrderByDateDesc(user.getId());
-        List<OrderResponse> responses = new ArrayList<>();
+    // =========================================================================
+    // Crear orden con itemList explícito
+    // =========================================================================
 
-        for (Order order : orders) {
-            responses.add(mapToOrderResponse(order));
-        }
-        return responses;
-    }
-
-    /**
-     * Obtiene una orden por ID verificando que le pertenezca al usuario dado.
-     * Devuelve null si no existe o si pertenece a otro usuario.
-     */
-    @Override
-    public OrderResponse getOrderById(Long id, String email) {
-        return orderRepository.findById(id)
-                .filter(o -> o.getUser().getEmail().equals(email))
-                .map(this::mapToOrderResponse)
-                .orElse(null);
-    }
-
-    /**
-     * Crea una orden de compra a partir de la lista de ítems del request.
-     *
-     * Flujo (igual al TPO aprobado + lógica de cupón):
-     *   1. Validar stock de cada skin
-     *   2. Descontar stock
-     *   3. Calcular totalPrice (suma de precio final × cantidad)
-     *   4. Aplicar descuento de cupón si se proporcionó
-     *   5. Persistir la orden y devolver el DTO de respuesta
-     *
-     * @throws NoStockAvailableException si alguna skin no tiene stock suficiente
-     */
     @Override
     @Transactional
     public OrderResponse createOrder(User user, OrderRequest orderRequest)
@@ -119,8 +97,6 @@ public class OrderServiceImpl implements OrderService {
 
         LocalDateTime now = LocalDateTime.now();
 
-        // Validar que la orden tenga al menos un ítem.
-        // Sin esto se crearía una orden con totalPrice=0 y sin detalles.
         if (orderRequest.getItemList() == null || orderRequest.getItemList().isEmpty()) {
             throw new RuntimeException("La orden debe contener al menos un ítem");
         }
@@ -132,46 +108,35 @@ public class OrderServiceImpl implements OrderService {
         List<OrderDetailResponse> detailResponses = new ArrayList<>();
         double totalPrice = 0.0;
 
-        // Procesar cada ítem de la orden
         for (OrderDetailRequest item : orderRequest.getItemList()) {
             Long skinId = item.getSkinId();
             Skin skin = skinRepository.findById(skinId)
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "Skin no encontrada: " + skinId));
+                    .orElseThrow(() -> new IllegalArgumentException("Skin no encontrada: " + skinId));
 
-            // Validar que la skin esté activa (no haya sido dada de baja)
             if (!skin.getActive()) {
-                throw new RuntimeException(
-                        "La skin '" + skin.getName() + "' ya no está disponible para la compra"
-                );
+                throw new RuntimeException("La skin '" + skin.getName() + "' ya no está disponible");
             }
 
-            // Validar que el usuario no esté comprando su propia skin
             if (skin.getVendedor() != null &&
                     skin.getVendedor().getEmail().equals(user.getEmail())) {
                 throw new PropietarioSkinException();
             }
 
-            // Validar stock disponible (igual que el TPO aprobado)
             if (item.getQuantity() > skin.getStock()) {
                 throw new NoStockAvailableException();
             }
 
-            // Descontar stock de la skin
             skin.setStock(skin.getStock() - item.getQuantity());
             skinRepository.save(skin);
 
-            // Precio final con descuento de la skin aplicado
             double finalPrice = skin.getFinalPrice();
 
-            // Crear y agregar el detalle de la orden
             OrderDetail detail = new OrderDetail();
             detail.setSkin(skin);
             detail.setQuantity(item.getQuantity());
             detail.setUnitPrice(finalPrice);
             order.addOrderDetail(detail);
 
-            // Construir el DTO de detalle para la respuesta
             OrderDetailResponse detailResponse = new OrderDetailResponse();
             detailResponse.setSkinId(skinId);
             detailResponse.setSkinName(skin.getName());
@@ -182,16 +147,12 @@ public class OrderServiceImpl implements OrderService {
             totalPrice += item.getQuantity() * finalPrice;
         }
 
-        // Aplicar cupón de descuento si se proporcionó
+        // Aplicar cupón si se proporcionó
         double descuentoAplicado = 0.0;
-        if (orderRequest.getCodigoCupon() != null &&
-                !orderRequest.getCodigoCupon().isBlank()) {
-
-            Cupon cupon = cuponRepository
-                    .findByCodigo(orderRequest.getCodigoCupon())
+        if (orderRequest.getCodigoCupon() != null && !orderRequest.getCodigoCupon().isBlank()) {
+            Cupon cupon = cuponRepository.findByCodigo(orderRequest.getCodigoCupon())
                     .orElseThrow(() -> new RuntimeException("Cupón no encontrado"));
 
-            // Validar cupón: activo y no vencido
             if (!cupon.getActivo()) {
                 throw new RuntimeException("El cupón no está activo");
             }
@@ -202,7 +163,6 @@ public class OrderServiceImpl implements OrderService {
 
             descuentoAplicado = cupon.getDescuento();
 
-            // Si el cupón es de uso único, desactivarlo tras aplicarlo
             if (!cupon.getMultiUso()) {
                 cupon.setActivo(false);
                 cuponRepository.save(cupon);
@@ -210,13 +170,11 @@ public class OrderServiceImpl implements OrderService {
         }
 
         double totalFinal = totalPrice * (1 - descuentoAplicado);
-
         order.setTotalPrice(totalPrice);
         order.setDescuentoAplicado(descuentoAplicado);
         order.setTotalFinal(totalFinal);
         orderRepository.save(order);
 
-        // Construir y devolver el DTO de respuesta completo
         OrderResponse response = new OrderResponse();
         response.setId(order.getId());
         response.setEmail(user.getEmail());
@@ -225,18 +183,54 @@ public class OrderServiceImpl implements OrderService {
         response.setDescuentoAplicado(descuentoAplicado);
         response.setTotalFinal(totalFinal);
         response.setOrderDetailResponses(detailResponses);
-
         return response;
     }
 
-    // -------------------------------------------------------------------------
-    // Método auxiliar de mapeo entidad → DTO
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // Eliminar orden
+    // =========================================================================
 
-    /**
-     * Convierte una entidad Order a su DTO de respuesta OrderResponse.
-     * Extraído como método privado para reutilizarlo en getOrdersForUser y getOrderById.
-     */
+    @Override
+    @Transactional
+    public void deleteOrder(Long orderId, User user) {
+        if (!orderRepository.existsByIdAndUserId(orderId, user.getId())) {
+            throw new IllegalArgumentException(
+                    "Orden no encontrada o no pertenece al usuario: " + orderId);
+        }
+        orderRepository.deleteById(orderId);
+    }
+
+    // =========================================================================
+    // Consultas
+    // =========================================================================
+
+    @Override
+    public List<Order> findAllOrders() {
+        return orderRepository.findAll();
+    }
+
+    @Override
+    public List<OrderResponse> getOrdersForUser(User user) {
+        List<Order> orders = orderRepository.findByUserIdOrderByDateDesc(user.getId());
+        List<OrderResponse> responses = new ArrayList<>();
+        for (Order order : orders) {
+            responses.add(mapToOrderResponse(order));
+        }
+        return responses;
+    }
+
+    @Override
+    public OrderResponse getOrderById(Long id, String email) {
+        return orderRepository.findById(id)
+                .filter(o -> o.getUser().getEmail().equals(email))
+                .map(this::mapToOrderResponse)
+                .orElse(null);
+    }
+
+    // =========================================================================
+    // Helper privado
+    // =========================================================================
+
     private OrderResponse mapToOrderResponse(Order order) {
         OrderResponse resp = new OrderResponse();
         resp.setId(order.getId());

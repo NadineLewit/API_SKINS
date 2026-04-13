@@ -9,88 +9,67 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/**
- * Controlador REST para la gestión de Cupones de descuento.
- *
- * Sigue la misma estructura de controllers del TPO aprobado.
- *
- * Los cupones permiten aplicar descuentos al finalizar una compra.
- * Rutas de admin:   POST /cupones         (crear cupón)
- *                   GET  /cupones         (listar todos los cupones)
- * Rutas de usuario: POST /cupones/validar (validar un cupón antes de usarlo)
- */
 @RestController
 @RequestMapping("cupones")
 public class CuponController {
 
-    // Inyección del servicio de cupones (consistente con el estilo del TPO aprobado)
     @Autowired
     private CuponService cuponService;
 
-    /**
-     * Valida si un cupón es válido (activo y no expirado).
-     * GET /cupones/validar?codigo=SUMMER20
-     *
-     * Se usa GET porque esta operación solo consulta el estado del cupón,
-     * no lo modifica. El cupón se descuenta/desactiva recién al confirmar la orden.
-     * Accesible por USER y ADMIN (el usuario lo usa en el checkout).
-     *
-     * @param codigo  código alfanumérico del cupón a validar
-     * @throws CuponInvalidoException si el código no existe, está expirado o inactivo
-     */
+    // =========================================================================
+    // Validar cupón
+    // GET /cupones/validar?codigo=PROMO2027
+    // TOKEN: USER o ADMIN
+    // =========================================================================
     @GetMapping("/validar")
     public ResponseEntity<Cupon> validarCupon(
             @RequestParam String codigo) throws CuponInvalidoException {
         return ResponseEntity.ok(cuponService.validar(codigo));
     }
 
-    /**
-     * Crea un nuevo cupón de descuento.
-     * POST /cupones
-     * Solo accesible por usuarios con rol ADMIN.
-     */
+    // =========================================================================
+    // Crear cupón
+    // POST /cupones
+    // TOKEN: ADMIN
+    // =========================================================================
     @PostMapping
     public ResponseEntity<Cupon> crearCupon(@RequestBody CuponRequest cuponRequest) {
-        Cupon result = cuponService.crear(cuponRequest);
-        return ResponseEntity.ok(result);
+        return ResponseEntity.ok(cuponService.crear(cuponRequest));
     }
 
-    /**
-     * Devuelve todos los cupones registrados en el sistema.
-     * GET /cupones
-     * Solo accesible por usuarios con rol ADMIN.
-     */
+    // =========================================================================
+    // Listar todos los cupones
+    // GET /cupones
+    // TOKEN: ADMIN
+    // =========================================================================
     @GetMapping
     public ResponseEntity<List<Cupon>> listarCupones() {
-        List<Cupon> cupones = cuponService.listar();
-        return ResponseEntity.ok(cupones);
+        return ResponseEntity.ok(cuponService.listar());
     }
 
-    /**
-     * Obtiene un cupón específico por su ID.
-     * GET /cupones/{id}
-     * Solo accesible por usuarios con rol ADMIN.
-     */
+    // =========================================================================
+    // Obtener cupón por ID (nuevo)
+    // GET /cupones/{id}
+    // TOKEN: ADMIN
+    // =========================================================================
     @GetMapping("/{id}")
-    public ResponseEntity<Cupon> obtenerCupon(@PathVariable Long id) {
-        Cupon cupon = cuponService.obtenerPorId(id);
-        if (cupon != null) {
+    public ResponseEntity<?> obtenerCuponPorId(@PathVariable Long id) {
+        try {
+            Cupon cupon = cuponService.obtenerPorId(id);
             return ResponseEntity.ok(cupon);
-        } else {
-            // Si no se encuentra el cupón, devuelve 404 Not Found
-            return ResponseEntity.notFound().build();
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body("Cupón no encontrado con id: " + id);
         }
     }
 
-    /**
-     * Elimina un cupón por su ID.
-     * DELETE /cupones/{id}
-     * Solo accesible por usuarios con rol ADMIN.
-     * Devuelve 204 No Content al eliminar correctamente.
-     */
+    // =========================================================================
+    // Eliminar cupón
+    // DELETE /cupones/{id}
+    // TOKEN: ADMIN
+    // =========================================================================
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminarCupon(@PathVariable Long id) {
+    public ResponseEntity<String> eliminarCupon(@PathVariable Long id) {
         cuponService.eliminar(id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok("Cupón eliminado exitosamente");
     }
 }

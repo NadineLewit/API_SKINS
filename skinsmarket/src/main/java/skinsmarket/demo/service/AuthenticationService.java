@@ -106,17 +106,17 @@ public class AuthenticationService {
      * La respuesta incluye email y firstName pero NO el rol.
      */
     public AuthenticationResponse authenticate(AuthenticationRequest request) {
-        // Spring Security verifica email y contraseña contra la BD
-        authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(
-                        request.getEmail(),
-                        request.getPassword()));
+        try {
+            authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(
+                            request.getEmail(),
+                            request.getPassword()));
+        } catch (Exception e) {
+            throw new RuntimeException("Credenciales inválidas. Verificá tu email y contraseña.");
+        }
 
-        // Credenciales correctas: generar token y devolver datos básicos
         User user = userRepository.findByEmail(request.getEmail()).orElseThrow();
         String jwtToken = jwtService.generateToken(user);
-        // Generar token y devolver solo el access_token
-        jwtToken = jwtService.generateToken(user);
         return AuthenticationResponse.builder()
                 .accessToken(jwtToken)
                 .build();

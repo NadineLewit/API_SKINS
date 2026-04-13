@@ -12,111 +12,97 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/**
- * Controlador REST para la gestión de Órdenes de compra de skins.
- *
- *
- * Todas las rutas requieren autenticación (rol USER).
- * Ruta base: /order
- */
 @RestController
 @RequestMapping("order")
 public class OrderController {
 
-    // Inyección del servicio de órdenes
     @Autowired
     private OrderService orderService;
 
-    // Inyección del repositorio de usuarios para obtener el usuario autenticado
     @Autowired
     private UserRepository userRepository;
 
-    /**
-     * Crea una nueva orden de compra a partir del carrito del usuario.
-     * POST /order
-     *
-     * Opcionalmente acepta un código de cupón de descuento.
-     * Valida el stock disponible de cada skin antes de confirmar la compra.
-     *
-     * @param orderRequest objeto con los items de la orden y opcional: código de cupón
-     * @throws NoStockAvailableException si alguna skin no tiene stock suficiente
-     */
+    // =========================================================================
+    // Crear orden con itemList explícito
+    // POST /order
+    // TOKEN: USER
+    // =========================================================================
     @PostMapping
     public ResponseEntity<Object> createOrder(
             Authentication auth,
             @RequestBody OrderRequest orderRequest)
             throws NoStockAvailableException, PropietarioSkinException {
-
-        // Obtenemos el email del usuario autenticado desde el token JWT
         String email = auth.getName();
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalStateException("Usuario no encontrado"));
-
-        // Delegamos la creación de la orden al servicio (incluye validación de cupón si viene)
         OrderResponse result = orderService.createOrder(user, orderRequest);
         return ResponseEntity.ok(result);
     }
 
-    /**
-     * Devuelve todas las órdenes del usuario autenticado.
-     * GET /order/me
-     *
-     * Permite al usuario ver su historial de compras de skins.
-     */
+    // =========================================================================
+    // Crear orden desde el carrito (nuevo)
+    // POST /order/from-carrito
+    // POST /order/from-carrito?codigoCupon=PROMO2027
+    // TOKEN: USER — sin body, lee el carrito automáticamente
+    // =========================================================================
+    @PostMapping("/from-carrito")
+    public ResponseEntity<?> createOrderFromCarrito(
+            Authentication auth,
+            @RequestParam(required = false) String codigoCupon) {
+        try {
+            String email = auth.getName();
+            OrderResponse result = orderService.createOrderFromCarrito(email, codigoCupon);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // =========================================================================
+    // Historial de órdenes del usuario
+    // GET /order/me
+    // TOKEN: USER
+    // =========================================================================
     @GetMapping("/me")
     public ResponseEntity<List<OrderResponse>> getMyOrders(Authentication auth) {
         String email = auth.getName();
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalStateException("Usuario no encontrado"));
-
-        List<OrderResponse> orders = orderService.getOrdersForUser(user);
-        return ResponseEntity.ok(orders);
+        return ResponseEntity.ok(orderService.getOrdersForUser(user));
     }
 
-    /**
-     * Devuelve una orden específica por su ID.
-     * GET /order/{id}
-     *
-     * El usuario solo puede ver sus propias órdenes (validación en la capa de servicio).
-     */
+    // =========================================================================
+    // Obtener orden por ID
+    // GET /order/{id}
+    // TOKEN: USER — solo devuelve órdenes propias
+    // =========================================================================
     @GetMapping("/{id}")
     public ResponseEntity<OrderResponse> getOrderById(
             Authentication auth,
             @PathVariable Long id) {
-
         String email = auth.getName();
         OrderResponse order = orderService.getOrderById(id, email);
-        if (order != null) {
-            return ResponseEntity.ok(order);
-        } else {
-            return ResponseEntity.notFound().build();
-        }
+        if (order != null) return ResponseEntity.ok(order);
+        return ResponseEntity.notFound().build();
     }
 
-    /**
-     * Elimina una orden de compra del usuario autenticado.
-     * DELETE /order/{id}
-     *
-     * El usuario solo puede eliminar sus propias órdenes.
-     * Devuelve 204 No Content si se eliminó correctamente.
-     * Devuelve 404 Not Found si la orden no existe o no le pertenece al usuario.
-     *
-     * @param id ID de la orden a eliminar
-     */
+    // =========================================================================
+    // Eliminar orden
+    // DELETE /order/{id}
+    // TOKEN: USER — solo puede eliminar sus propias órdenes
+    // =========================================================================
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteOrder(
+    public ResponseEntity<String> deleteOrder(
             Authentication auth,
             @PathVariable Long id) {
-
         String email = auth.getName();
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalStateException("Usuario no encontrado"));
-
         try {
             orderService.deleteOrder(id, user);
-            return ResponseEntity.noContent().build();
+            return ResponseEntity.ok("Orden eliminada exitosamente");
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.notFound().build();
+            return ResponseEntity.status(404).body(e.getMessage());
         }
     }
 }
