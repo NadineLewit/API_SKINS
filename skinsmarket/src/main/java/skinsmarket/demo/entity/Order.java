@@ -66,7 +66,7 @@ public class Order {
     private List<OrderDetail> orderDetails = new ArrayList<>();
 
     // -------------------------------------------------------------------------
-    // Métodos auxiliares de gestión de detalles (idénticos al TPO aprobado)
+    // Métodos auxiliares de gestión de detalles
     // -------------------------------------------------------------------------
 
     /**

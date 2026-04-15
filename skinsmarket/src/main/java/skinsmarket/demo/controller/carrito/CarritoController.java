@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("carrito")
 public class CarritoController {
 
-    // Inyección del servicio de carrito (consistente con el estilo del TPO aprobado)
+    // Inyección del servicio de carrito
     @Autowired
     private CarritoService carritoService;
 

@@ -23,7 +23,6 @@ import java.util.Arrays;
 /**
  * Configuración de seguridad de Spring Security para el marketplace de skins.
  *
- * Estructura idéntica al SecurityConfig del TPO aprobado.
  * Solo se modificaron las rutas para que coincidan con los nuevos controllers:
  *   - /games/**  → /skins/**
  *   - /wishlist/** → /carrito/**
@@ -143,7 +142,6 @@ public class SecurityConfig {
     /**
      * Configuración de CORS (Cross-Origin Resource Sharing).
      *
-     * Idéntica al TPO aprobado: permite requests desde el frontend en localhost:5173.
      * En producción se debe reemplazar el origen por la URL real del frontend.
      */
     @Bean

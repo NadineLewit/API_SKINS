@@ -34,7 +34,6 @@ public class OrderDetail {
 
     // Skin comprada en esta línea de detalle
     // FK: skin_id referencia a la tabla skins
-    // Equivalente a game en el OrderDetail del TPO aprobado
     @ManyToOne
     @JoinColumn(name = "skin_id")
     private Skin skin;

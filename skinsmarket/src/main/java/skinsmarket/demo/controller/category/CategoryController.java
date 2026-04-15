@@ -35,7 +35,7 @@ import skinsmarket.demo.controller.category.CategoryRequest;
 @RequestMapping("categories")
 public class CategoryController {
 
-    // Inyección del servicio de categorías (consistente con el TPO aprobado)
+    // Inyección del servicio de categorías
     @Autowired
     private CategoryService categoryService;
 

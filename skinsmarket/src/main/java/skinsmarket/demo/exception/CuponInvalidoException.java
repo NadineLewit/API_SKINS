@@ -7,7 +7,6 @@ import org.springframework.web.bind.annotation.ResponseStatus;
  * Excepción lanzada cuando un cupón de descuento no es válido.
  *
  *
- * Sigue la misma estructura que las excepciones del TPO aprobado:
  * extiende Exception y usa @ResponseStatus para el mapeo HTTP automático.
  * Devuelve HTTP 400 Bad Request.
  *

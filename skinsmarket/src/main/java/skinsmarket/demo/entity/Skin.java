@@ -95,7 +95,6 @@ public class Skin {
 
     /**
      * Precio final aplicando el descuento de la skin.
-     * Igual que getFinalPrice() del TPO aprobado.
      */
     public Double getFinalPrice() {
         return price - (price * discount);

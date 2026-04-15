@@ -10,7 +10,6 @@ import skinsmarket.demo.exception.CategoryDuplicateException;
  * Interfaz del servicio de Categorías.
  *
  * Define el contrato que implementa CategoryServiceImpl.
- * El uso de interfaz + implementación separada es el patrón del TPO aprobado
  * para la capa de servicios.
  */
 public interface CategoryService {

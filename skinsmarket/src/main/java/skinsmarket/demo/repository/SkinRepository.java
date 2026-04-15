@@ -20,7 +20,6 @@ public interface SkinRepository extends JpaRepository<Skin, Long> {
     /**
      * Devuelve todas las skins con stock mayor al valor indicado.
      *
-     * Equivalente a findByStockGreaterThan del GameRepository del TPO aprobado.
      * Usado en getAllAvailableSkins() para devolver solo skins comprables.
      *
      * @param stock valor mínimo de stock (normalmente se pasa 0)
@@ -47,7 +46,6 @@ public interface SkinRepository extends JpaRepository<Skin, Long> {
     /**
      * Devuelve todas las skins de una categoría específica (búsqueda por nombre).
      *
-     * Equivalente a findByCategories_Name del GameRepository del TPO aprobado.
      * Navega la relación Skin → Category usando el nombre de la categoría.
      *
      * @param name nombre de la categoría (ej: "Rifle", "Pistola")
@@ -61,7 +59,6 @@ public interface SkinRepository extends JpaRepository<Skin, Long> {
     /**
      * Devuelve skins cuyo precio esté dentro del rango [min, max].
      *
-     * Equivalente a findByPriceBetween del GameRepository del TPO aprobado.
      * Usado en el filtro de precios del catálogo público.
      *
      * @param min precio mínimo del rango
@@ -73,7 +70,6 @@ public interface SkinRepository extends JpaRepository<Skin, Long> {
     /**
      * Devuelve skins con precio menor o igual al valor indicado.
      *
-     * Equivalente a findByPriceLessThanEqual del GameRepository del TPO aprobado.
      * Usado cuando el usuario solo especifica un precio máximo en el filtro.
      *
      * @param price precio máximo a filtrar
@@ -84,7 +80,6 @@ public interface SkinRepository extends JpaRepository<Skin, Long> {
     /**
      * Devuelve skins con precio mayor o igual al valor indicado.
      *
-     * Equivalente a findByPriceGreaterThanEqual del GameRepository del TPO aprobado.
      * Usado cuando el usuario solo especifica un precio mínimo en el filtro.
      *
      * @param price precio mínimo a filtrar
@@ -95,7 +90,6 @@ public interface SkinRepository extends JpaRepository<Skin, Long> {
     /**
      * Busca skins cuyo nombre contenga el texto dado (case-insensitive).
      *
-     * Equivalente a findByTitleContainingIgnoreCase del GameRepository del TPO aprobado.
      * Permite búsquedas parciales: buscar "dragon" encontrará "Dragon Lore", "Dragon King", etc.
      *
      * @param name texto a buscar dentro del nombre de la skin

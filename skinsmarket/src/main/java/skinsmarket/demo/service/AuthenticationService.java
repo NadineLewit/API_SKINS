@@ -24,7 +24,6 @@ import lombok.RequiredArgsConstructor;
 /**
  * Servicio de autenticación: registro e inicio de sesión con JWT.
  *
- * Estructura idéntica al AuthenticationService del TPO aprobado.
  * Única diferencia: al registrar un usuario se crea un Carrito vacío
  * en lugar de una Wishlist (dominio de skins).
  *
