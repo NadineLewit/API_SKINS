@@ -1,5 +1,6 @@
 package skinsmarket.demo.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.time.LocalDateTime;
@@ -12,6 +13,12 @@ import java.util.Base64;
  *   - Se reemplaza imageUrl (String) por image (byte[]) almacenado como BLOB en la BD.
  *   - Al devolver la skin, la imagen se serializa en base64 para que el frontend
  *     la renderice con: <img src={`data:image/jpeg;base64,${skin.imageBase64}`} />
+ *
+ * NOTA: tanto el campo `image` (byte[]) como el getter `getImageBase64()` están
+ *       anotados con @JsonIgnore para que NO se serialicen en las respuestas JSON.
+ *       Esto evita devolver el chorizo de bytes en Insomnia/Postman.
+ *       La imagen se guarda en la BD igual; si el frontend la necesita, se puede
+ *       exponer un endpoint dedicado tipo GET /skins/{id}/image que devuelva los bytes.
  */
 @Entity
 @Data
@@ -56,10 +63,10 @@ public class Skin {
      * @Lob indica a Hibernate que este campo se almacena como BLOB (Binary Large Object).
      * columnDefinition = "LONGBLOB" permite imágenes de hasta 4GB en MySQL.
      *
-     * Para subirla: multipart/form-data con campo "image" (MultipartFile).
-     * Para mostrarla: el frontend usa imageBase64 que devuelve este campo en base64.
+     * @JsonIgnore evita que los bytes crudos aparezcan en las respuestas JSON.
      */
     @Lob
+    @JsonIgnore
     @Column(name = "image", columnDefinition = "LONGBLOB")
     private byte[] image;
 
@@ -73,7 +80,7 @@ public class Skin {
 
     @ManyToOne
     @JoinColumn(name = "vendedor_id")
-    @com.fasterxml.jackson.annotation.JsonIgnore
+    @JsonIgnore
     private User vendedor;
 
     // -------------------------------------------------------------------------
@@ -101,13 +108,13 @@ public class Skin {
     }
 
     /**
-     * Devuelve la imagen codificada en base64 para que el frontend la renderice.
+     * Devuelve la imagen codificada en base64.
      *
-     * Uso en el frontend:
-     *   <img src={`data:image/jpeg;base64,${skin.imageBase64}`} />
-     *
-     * Devuelve null si no hay imagen cargada.
+     * @JsonIgnore evita que este campo aparezca en las respuestas JSON
+     * para mantener Insomnia/Postman legibles. La imagen sigue guardada
+     * en la BD y se puede exponer por un endpoint dedicado si hace falta.
      */
+    @JsonIgnore
     public String getImageBase64() {
         if (image == null) return null;
         return Base64.getEncoder().encodeToString(image);

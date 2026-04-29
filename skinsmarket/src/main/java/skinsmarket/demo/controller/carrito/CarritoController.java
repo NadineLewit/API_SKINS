@@ -1,5 +1,6 @@
 package skinsmarket.demo.controller.carrito;
 
+import skinsmarket.demo.controller.common.ApiResponse;
 import skinsmarket.demo.entity.Carrito;
 import skinsmarket.demo.service.CarritoService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,14 +14,16 @@ import org.springframework.web.bind.annotation.*;
  * El carrito permite al usuario agregar skins, modificar cantidades y vaciar el carrito
  * antes de finalizar la compra.
  *
- * Todas las rutas requieren autenticación (rol USER).
+ * Todas las rutas requieren autenticación (rol USER o ADMIN).
  * Ruta base: /carrito
+ *
+ * Las cantidades se pasan como query param (?cantidad=X), NO en el body,
+ * porque las modificaciones del carrito son parciales y no requieren payload JSON.
  */
 @RestController
 @RequestMapping("carrito")
 public class CarritoController {
 
-    // Inyección del servicio de carrito
     @Autowired
     private CarritoService carritoService;
 
@@ -30,70 +33,65 @@ public class CarritoController {
      * GET /carrito
      */
     @GetMapping
-    public ResponseEntity<Carrito> verCarrito(Authentication auth) {
-        // Obtenemos el email del usuario desde el token JWT
+    public ResponseEntity<?> verCarrito(Authentication auth) {
         String email = auth.getName();
-        return ResponseEntity.ok(carritoService.obtenerOCrearCarrito(email));
+        Carrito carrito = carritoService.obtenerOCrearCarrito(email);
+        return ResponseEntity.ok(ApiResponse.of("Carrito del usuario", carrito));
     }
 
     /**
      * Agrega una skin al carrito del usuario autenticado.
      * Si la skin ya está en el carrito, incrementa la cantidad.
      * PATCH /carrito/skins/{skinId}?cantidad=1
-     *
-     * @param skinId   ID de la skin a agregar
-     * @param cantidad cantidad a agregar (por defecto 1 si no se especifica)
      */
     @PatchMapping("/skins/{skinId}")
-    public ResponseEntity<Carrito> agregarSkin(
+    public ResponseEntity<?> agregarSkin(
             Authentication auth,
             @PathVariable Long skinId,
             @RequestParam(defaultValue = "1") Integer cantidad) {
 
         String email = auth.getName();
-        return ResponseEntity.ok(carritoService.agregarSkin(email, skinId, cantidad));
+        Carrito carrito = carritoService.agregarSkin(email, skinId, cantidad);
+        return ResponseEntity.ok(ApiResponse.of("Skin agregada al carrito", carrito));
     }
 
     /**
      * Modifica la cantidad de un ítem específico en el carrito.
      * PUT /carrito/items/{itemId}?cantidad=3
-     *
-     * @param itemId   ID del ítem del carrito a modificar
-     * @param cantidad nueva cantidad (si es 0 o negativo, se elimina el ítem)
      */
     @PutMapping("/items/{itemId}")
-    public ResponseEntity<Carrito> modificarCantidad(
+    public ResponseEntity<?> modificarCantidad(
             Authentication auth,
             @PathVariable Long itemId,
             @RequestParam Integer cantidad) {
 
         String email = auth.getName();
-        return ResponseEntity.ok(carritoService.modificarCantidad(email, itemId, cantidad));
+        Carrito carrito = carritoService.modificarCantidad(email, itemId, cantidad);
+        return ResponseEntity.ok(ApiResponse.of("Cantidad del ítem actualizada", carrito));
     }
 
     /**
      * Elimina un ítem específico del carrito.
      * DELETE /carrito/items/{itemId}
-     *
-     * @param itemId ID del ítem del carrito a eliminar
      */
     @DeleteMapping("/items/{itemId}")
-    public ResponseEntity<Carrito> eliminarItem(
+    public ResponseEntity<?> eliminarItem(
             Authentication auth,
             @PathVariable Long itemId) {
 
         String email = auth.getName();
-        return ResponseEntity.ok(carritoService.eliminarItem(email, itemId));
+        Carrito carrito = carritoService.eliminarItem(email, itemId);
+        return ResponseEntity.ok(ApiResponse.of("Ítem eliminado del carrito", carrito));
     }
 
     /**
      * Vacía completamente el carrito del usuario autenticado.
      * DELETE /carrito
-     * Devuelve el carrito vacío como confirmación.
      */
     @DeleteMapping
-    public ResponseEntity<Carrito> vaciarCarrito(Authentication auth) {
+    public ResponseEntity<?> vaciarCarrito(Authentication auth) {
         String email = auth.getName();
-        return ResponseEntity.ok(carritoService.vaciar(email));
+        Carrito carrito = carritoService.vaciar(email);
+        return ResponseEntity.ok(ApiResponse.of("Carrito vaciado correctamente", carrito));
     }
 }

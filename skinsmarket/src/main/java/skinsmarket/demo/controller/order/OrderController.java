@@ -1,8 +1,7 @@
 package skinsmarket.demo.controller.order;
 
+import skinsmarket.demo.controller.common.ApiResponse;
 import skinsmarket.demo.entity.User;
-import skinsmarket.demo.exception.NoStockAvailableException;
-import skinsmarket.demo.exception.PropietarioSkinException;
 import skinsmarket.demo.repository.UserRepository;
 import skinsmarket.demo.service.OrderService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +11,22 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * Controlador REST para la gestión de Órdenes de compra.
+ *
+ * El flujo de la orden está envuelto en @Transactional en el service:
+ * si algo falla, se hace rollback automático (stock vuelve, orden no se guarda).
+ *
+ * DECISIÓN DE DISEÑO:
+ *   - La única forma de crear una orden es a través del carrito (POST /order/from-carrito).
+ *     El endpoint anterior POST /order con itemList explícito fue eliminado porque
+ *     no tiene sentido en el flujo del marketplace: el comprador siempre arma el
+ *     carrito antes de confirmar la compra.
+ *   - No se permite eliminar órdenes (DELETE /order/{id} fue eliminado). Una orden
+ *     ya creada es un registro histórico de una transacción real y no debe borrarse.
+ *
+ * Todas las respuestas siguen el formato uniforme ApiResponse.
+ */
 @RestController
 @RequestMapping("order")
 public class OrderController {
@@ -22,29 +37,12 @@ public class OrderController {
     @Autowired
     private UserRepository userRepository;
 
-    // =========================================================================
-    // Crear orden con itemList explícito
-    // POST /order
-    // TOKEN: USER
-    // =========================================================================
-    @PostMapping
-    public ResponseEntity<Object> createOrder(
-            Authentication auth,
-            @RequestBody OrderRequest orderRequest)
-            throws NoStockAvailableException, PropietarioSkinException {
-        String email = auth.getName();
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalStateException("Usuario no encontrado"));
-        OrderResponse result = orderService.createOrder(user, orderRequest);
-        return ResponseEntity.ok(result);
-    }
-
-    // =========================================================================
-    // Crear orden desde el carrito (nuevo)
-    // POST /order/from-carrito
-    // POST /order/from-carrito?codigoCupon=PROMO2027
-    // TOKEN: USER — sin body, lee el carrito automáticamente
-    // =========================================================================
+    /**
+     * Crea una orden a partir del carrito del usuario.
+     * POST /order/from-carrito
+     * POST /order/from-carrito?codigoCupon=PROMO2027
+     * TOKEN: USER — sin body, lee el carrito automáticamente
+     */
     @PostMapping("/from-carrito")
     public ResponseEntity<?> createOrderFromCarrito(
             Authentication auth,
@@ -52,57 +50,43 @@ public class OrderController {
         try {
             String email = auth.getName();
             OrderResponse result = orderService.createOrderFromCarrito(email, codigoCupon);
-            return ResponseEntity.ok(result);
+            return ResponseEntity.status(201)
+                    .body(ApiResponse.of("Orden creada desde el carrito", result));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            return ResponseEntity.badRequest().body(ApiResponse.of(e.getMessage()));
         }
     }
 
-    // =========================================================================
-    // Historial de órdenes del usuario
-    // GET /order/me
-    // TOKEN: USER
-    // =========================================================================
+    /**
+     * Historial de órdenes del usuario autenticado.
+     * GET /order/me
+     * TOKEN: USER
+     */
     @GetMapping("/me")
-    public ResponseEntity<List<OrderResponse>> getMyOrders(Authentication auth) {
+    public ResponseEntity<?> getMyOrders(Authentication auth) {
         String email = auth.getName();
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalStateException("Usuario no encontrado"));
-        return ResponseEntity.ok(orderService.getOrdersForUser(user));
+        List<OrderResponse> orders = orderService.getOrdersForUser(user);
+        return ResponseEntity.ok(
+                ApiResponse.of("Tus órdenes (" + orders.size() + ")", orders));
     }
 
-    // =========================================================================
-    // Obtener orden por ID
-    // GET /order/{id}
-    // TOKEN: USER — solo devuelve órdenes propias
-    // =========================================================================
+    /**
+     * Obtiene una orden por ID.
+     * GET /order/{id}
+     * TOKEN: USER — solo devuelve órdenes propias
+     */
     @GetMapping("/{id}")
-    public ResponseEntity<OrderResponse> getOrderById(
+    public ResponseEntity<?> getOrderById(
             Authentication auth,
             @PathVariable Long id) {
         String email = auth.getName();
         OrderResponse order = orderService.getOrderById(id, email);
-        if (order != null) return ResponseEntity.ok(order);
-        return ResponseEntity.notFound().build();
-    }
-
-    // =========================================================================
-    // Eliminar orden
-    // DELETE /order/{id}
-    // TOKEN: USER — solo puede eliminar sus propias órdenes
-    // =========================================================================
-    @DeleteMapping("/{id}")
-    public ResponseEntity<String> deleteOrder(
-            Authentication auth,
-            @PathVariable Long id) {
-        String email = auth.getName();
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalStateException("Usuario no encontrado"));
-        try {
-            orderService.deleteOrder(id, user);
-            return ResponseEntity.ok("Orden eliminada exitosamente");
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(404).body(e.getMessage());
+        if (order != null) {
+            return ResponseEntity.ok(ApiResponse.of("Orden encontrada", order));
         }
+        return ResponseEntity.status(404)
+                .body(ApiResponse.of("Orden no encontrada con id: " + id));
     }
 }
