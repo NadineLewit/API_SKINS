@@ -1,12 +1,11 @@
 package skinsmarket.demo.service;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.transaction.Transactional;
 import lombok.Data;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import skinsmarket.demo.controller.skincatalogo.SkinCatalogoRequest;
@@ -19,12 +18,16 @@ import java.util.List;
 public class SkinCatalogoServiceImpl implements SkinCatalogoService {
 
     /**
-     * URL de la API pública de ByMykel/CSGO-API.
-     * No requiere API key — es un JSON estático servido desde GitHub Pages.
+     * URL del endpoint de skins de la API pública de ByMykel/CSGO-API.
+     *
+     * Ojo: hay que usar raw.githubusercontent.com (que sirve el archivo crudo).
+     * La URL bymykel.github.io es la landing page del proyecto y devuelve HTML.
+     *
+     * No requiere API key — es JSON estático servido desde el repo de GitHub.
      * Documentación: https://github.com/ByMykel/CSGO-API
      */
     private static final String STEAM_SKINS_URL =
-            "https://bymykel.github.io/CSGO-API/api/en/skins.json";
+            "https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/skins.json";
 
     @Autowired
     private SkinCatalogoRepository skinCatalogoRepository;
@@ -39,24 +42,43 @@ public class SkinCatalogoServiceImpl implements SkinCatalogoService {
     @Override
     @Transactional
     public int sincronizarDesdeApi(Integer limit) {
-        // 1. Hacemos GET a la API y deserializamos a una lista de DTOs
-        ResponseEntity<List<ApiSkinDto>> response = restTemplate.exchange(
-                STEAM_SKINS_URL,
-                HttpMethod.GET,
-                null,
-                new ParameterizedTypeReference<List<ApiSkinDto>>() {});
+        // 1. Traemos la respuesta como String crudo.
+        //    Hacemos esto en lugar de pedir directamente List<ApiSkinDto> porque
+        //    GitHub sirve el JSON con Content-Type "text/plain", lo que hace
+        //    que el RestTemplate no encuentre un MessageConverter de Jackson
+        //    automáticamente. Pidiendo String se usa StringHttpMessageConverter
+        //    que acepta cualquier text/*, y después parseamos manualmente.
+        String json = restTemplate.getForObject(STEAM_SKINS_URL, String.class);
 
-        List<ApiSkinDto> skinsDeLaApi = response.getBody();
+        if (json == null || json.isBlank()) {
+            throw new RuntimeException("La API de skins no devolvió datos");
+        }
+
+        // 2. Deserializamos el JSON con un ObjectMapper local
+        ObjectMapper mapper = new ObjectMapper();
+        // Por si la API agrega campos nuevos en el futuro, evitamos que el
+        // deserializer falle por propiedades desconocidas.
+        mapper.configure(
+                com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,
+                false);
+
+        List<ApiSkinDto> skinsDeLaApi;
+        try {
+            skinsDeLaApi = mapper.readValue(json, new TypeReference<List<ApiSkinDto>>() {});
+        } catch (Exception e) {
+            throw new RuntimeException("Error al parsear JSON de la API: " + e.getMessage());
+        }
+
         if (skinsDeLaApi == null || skinsDeLaApi.isEmpty()) {
             throw new RuntimeException("La API de skins no devolvió datos");
         }
 
-        // 2. Aplicamos el límite si fue provisto (default: todas las que vienen)
+        // 3. Aplicamos el límite si fue provisto (default: todas las que vienen)
         int max = (limit != null && limit > 0)
                 ? Math.min(limit, skinsDeLaApi.size())
                 : skinsDeLaApi.size();
 
-        // 3. Recorremos y persistimos solo las que no existen en la BD
+        // 4. Recorremos y persistimos solo las que no existen en la BD
         int insertadas = 0;
         for (int i = 0; i < max; i++) {
             ApiSkinDto dto = skinsDeLaApi.get(i);
@@ -155,7 +177,7 @@ public class SkinCatalogoServiceImpl implements SkinCatalogoService {
     // =========================================================================
 
     /**
-     * Estructura mínima de la respuesta de https://bymykel.github.io/CSGO-API/.
+     * Estructura mínima de la respuesta de la API.
      * Solo mapeamos los campos que necesitamos. @JsonIgnoreProperties evita
      * que el deserializer falle cuando vienen campos extra.
      */
