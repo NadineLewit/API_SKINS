@@ -10,7 +10,11 @@ import java.util.List;
 
 public interface OrderService {
 
-    /** Crea una orden a partir de un OrderRequest con itemList explícito. */
+    /**
+     * Crea una orden a partir de un OrderRequest con itemList explícito.
+     * Sigue siendo público en la interfaz porque createOrderFromCarrito lo reutiliza
+     * internamente. NO está expuesto como endpoint REST.
+     */
     OrderResponse createOrder(User user, OrderRequest orderRequest)
             throws NoStockAvailableException, PropietarioSkinException;
 
@@ -32,10 +36,4 @@ public interface OrderService {
 
     /** Devuelve todas las órdenes del sistema (panel admin). */
     List<Order> findAllOrders();
-
-    /**
-     * Elimina una orden verificando que pertenezca al usuario.
-     * Lanza IllegalArgumentException si no existe o no le pertenece.
-     */
-    void deleteOrder(Long orderId, User user);
 }

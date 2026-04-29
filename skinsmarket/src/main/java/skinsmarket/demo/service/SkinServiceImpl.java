@@ -1,14 +1,15 @@
 package skinsmarket.demo.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import skinsmarket.demo.controller.skin.SkinRequest;
 import skinsmarket.demo.entity.Category;
 import skinsmarket.demo.entity.Skin;
+import skinsmarket.demo.entity.SkinCatalogo;
 import skinsmarket.demo.entity.User;
 import skinsmarket.demo.exception.InvalidDiscountException;
 import skinsmarket.demo.exception.NegativePriceException;
 import skinsmarket.demo.exception.NegativeStockException;
 import skinsmarket.demo.repository.CategoryRepository;
+import skinsmarket.demo.repository.SkinCatalogoRepository;
 import skinsmarket.demo.repository.SkinRepository;
 import skinsmarket.demo.repository.UserRepository;
 import skinsmarket.demo.utils.InfoValidator;
@@ -19,6 +20,17 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * Implementación del SkinService.
+ *
+ * REGLA DE NEGOCIO (cambio reciente):
+ *   - USER vendedor: para publicar una skin DEBE referenciar un SkinCatalogo
+ *     existente (catalogoId obligatorio). Los atributos visuales (name,
+ *     description, game) se copian del catálogo, ignorando lo que el usuario
+ *     haya enviado en esos campos.
+ *   - ADMIN: catalogoId opcional. Si lo provee, mismo comportamiento que USER.
+ *     Si no lo provee, crea/edita libremente con los datos enviados.
+ */
 @Service
 public class SkinServiceImpl implements SkinService {
 
@@ -30,6 +42,9 @@ public class SkinServiceImpl implements SkinService {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private SkinCatalogoRepository skinCatalogoRepository;
 
     // =========================================================================
     // CRUD base — TODOS requieren imagen
@@ -43,23 +58,22 @@ public class SkinServiceImpl implements SkinService {
 
     /**
      * Crea skin con imagen BLOB obligatoria (admin).
-     * Si no hay imagen lanza RuntimeException → 400 Bad Request.
+     * El catalogoId es OPCIONAL para admin — puede crear libremente o sobre el catálogo.
      */
     @Override
     @Transactional
     public Skin createSkinWithImage(SkinRequest skinRequest, byte[] imageBytes)
             throws NegativeStockException, NegativePriceException, InvalidDiscountException {
-        return buildAndSaveSkin(skinRequest, null, imageBytes);
+        // ADMIN: catalogoId es opcional → false en el segundo argumento
+        return buildAndSaveSkin(skinRequest, null, imageBytes, false);
     }
 
-    /**
-     * Edita skin actualizando la imagen BLOB obligatoria.
-     */
+    /** Edita skin (admin). */
     @Override
     @Transactional
     public Skin editSkinWithImage(Long id, SkinRequest skinRequest, byte[] imageBytes)
             throws NegativeStockException, NegativePriceException, InvalidDiscountException {
-        return updateSkin(id, skinRequest, imageBytes);
+        return updateSkin(id, skinRequest, imageBytes, false);
     }
 
     /** Baja lógica: active=false. */
@@ -129,7 +143,7 @@ public class SkinServiceImpl implements SkinService {
     }
 
     // =========================================================================
-    // Endpoints de vendedor
+    // Endpoints de vendedor (USER)
     // =========================================================================
 
     @Override
@@ -138,7 +152,8 @@ public class SkinServiceImpl implements SkinService {
             throws NegativeStockException, NegativePriceException, InvalidDiscountException {
         User vendedor = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado: " + email));
-        return buildAndSaveSkin(skinRequest, vendedor, imageBytes);
+        // USER: catalogoId obligatorio → true en el segundo argumento (requiereCatalogo)
+        return buildAndSaveSkin(skinRequest, vendedor, imageBytes, true);
     }
 
     @Override
@@ -159,6 +174,9 @@ public class SkinServiceImpl implements SkinService {
             if (!esAdmin && !esVendedor) {
                 throw new RuntimeException("No tenés permiso para editar esta skin");
             }
+            // En la edición NO se permite cambiar la skin del catálogo (no tiene sentido
+            // que una publicación de "AK-47 Redline" pase a ser "AWP Dragon Lore"). Se
+            // ignora el catalogoId del request — solo se actualizan precio, stock, etc.
             aplicarCampos(skin, skinRequest, finalCategory);
             skin.setImage(imageBytes);
             return skinRepository.save(skin);
@@ -175,7 +193,7 @@ public class SkinServiceImpl implements SkinService {
             boolean esVendedor = skin.getVendedor() != null
                     && skin.getVendedor().getEmail().equals(email);
             if (!esAdmin && !esVendedor) {
-                throw new RuntimeException("No tenés permiso para eliminar esta skin");
+                throw new RuntimeException("No tenés permiso para inactivar esta skin");
             }
             skin.setActive(false);
             skinRepository.save(skin);
@@ -188,33 +206,61 @@ public class SkinServiceImpl implements SkinService {
     // =========================================================================
 
     /**
-     * Construye y guarda una skin. La imagen es OBLIGATORIA.
-     * Lanza RuntimeException si no se provee imagen.
+     * Construye y guarda una skin (publicación).
+     *
+     * @param req               datos de la skin
+     * @param vendedor          el usuario vendedor (null si es ADMIN sin email)
+     * @param imageBytes        imagen obligatoria
+     * @param requiereCatalogo  true para USER (catalogoId obligatorio),
+     *                          false para ADMIN (catalogoId opcional)
      */
-    private Skin buildAndSaveSkin(SkinRequest req, User vendedor, byte[] imageBytes)
+    private Skin buildAndSaveSkin(SkinRequest req, User vendedor, byte[] imageBytes,
+                                  boolean requiereCatalogo)
             throws NegativeStockException, NegativePriceException, InvalidDiscountException {
         validarImagen(imageBytes);
         validarDatos(req);
         Category category = resolverCategoria(req);
+        SkinCatalogo catalogo = resolverCatalogo(req, requiereCatalogo);
+
         double discount = req.getDiscount() != null ? req.getDiscount() : 0.0;
 
         Skin skin = new Skin();
-        skin.setName(req.getName());
-        skin.setDescription(req.getDescription());
         skin.setPrice(req.getPrice());
         skin.setDiscount(discount);
         skin.setStock(req.getStock());
-        skin.setGame(req.getGame());
         skin.setCategory(category);
         skin.setActive(true);
         skin.setFechaAlta(LocalDateTime.now());
         skin.setVendedor(vendedor);
         skin.setImage(imageBytes);
+        skin.setCatalogo(catalogo);
+
+        // Si hay catálogo, los datos visuales se copian del catálogo (ignorando lo
+        // que el usuario envió). Si no hay catálogo (caso ADMIN libre), se usan los
+        // valores del request.
+        if (catalogo != null) {
+            skin.setName(catalogo.getName());
+            skin.setDescription(catalogo.getDescription());
+            skin.setGame("CS2"); // el catálogo de ByMykel es de CS2
+        } else {
+            skin.setName(req.getName());
+            skin.setDescription(req.getDescription());
+            skin.setGame(req.getGame());
+        }
+
+        // Atributos del dominio que sí decide el vendedor (varían por publicación)
+        if (req.getRareza() != null && !req.getRareza().isBlank()) {
+            skin.setRareza(Skin.Rareza.valueOf(req.getRareza().toUpperCase()));
+        }
+        if (req.getExterior() != null && !req.getExterior().isBlank()) {
+            skin.setExterior(Skin.Exterior.valueOf(req.getExterior().toUpperCase()));
+        }
+        skin.setStattrak(Boolean.TRUE.equals(req.getStattrak()));
 
         return skinRepository.save(skin);
     }
 
-    private Skin updateSkin(Long id, SkinRequest req, byte[] imageBytes)
+    private Skin updateSkin(Long id, SkinRequest req, byte[] imageBytes, boolean requiereCatalogo)
             throws NegativeStockException, NegativePriceException, InvalidDiscountException {
         validarImagen(imageBytes);
         validarDatos(req);
@@ -222,6 +268,7 @@ public class SkinServiceImpl implements SkinService {
         final Category finalCategory = category;
 
         return skinRepository.findById(id).map(skin -> {
+            // En edición no cambiamos el catálogo (mantener identidad de la publicación)
             aplicarCampos(skin, req, finalCategory);
             skin.setImage(imageBytes);
             return skinRepository.save(skin);
@@ -250,14 +297,50 @@ public class SkinServiceImpl implements SkinService {
                         "Categoría inexistente: " + req.getCategoryId()));
     }
 
+    /**
+     * Resuelve el catálogo según la regla de negocio:
+     * - Si requiereCatalogo=true (USER) → catalogoId obligatorio.
+     * - Si requiereCatalogo=false (ADMIN) → opcional.
+     */
+    private SkinCatalogo resolverCatalogo(SkinRequest req, boolean requiereCatalogo) {
+        if (req.getCatalogoId() == null) {
+            if (requiereCatalogo) {
+                throw new RuntimeException(
+                        "Los usuarios solo pueden publicar skins basadas en el catálogo. " +
+                        "Especificá un catalogoId válido en el request.");
+            }
+            return null; // admin sin catálogo: modo libre
+        }
+        return skinCatalogoRepository.findById(req.getCatalogoId())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Catálogo inexistente con id: " + req.getCatalogoId()));
+    }
+
     private void aplicarCampos(Skin skin, SkinRequest req, Category category) {
         double discount = req.getDiscount() != null ? req.getDiscount() : 0.0;
-        skin.setName(req.getName());
-        skin.setDescription(req.getDescription());
+        // Si la skin tiene catálogo asociado, el name/description/game lo manda el catálogo
+        if (skin.getCatalogo() != null) {
+            skin.setName(skin.getCatalogo().getName());
+            skin.setDescription(skin.getCatalogo().getDescription());
+            skin.setGame("CS2");
+        } else {
+            skin.setName(req.getName());
+            skin.setDescription(req.getDescription());
+            skin.setGame(req.getGame());
+        }
         skin.setPrice(req.getPrice());
         skin.setDiscount(discount);
         skin.setStock(req.getStock());
-        skin.setGame(req.getGame());
         skin.setCategory(category);
+
+        if (req.getRareza() != null && !req.getRareza().isBlank()) {
+            skin.setRareza(Skin.Rareza.valueOf(req.getRareza().toUpperCase()));
+        }
+        if (req.getExterior() != null && !req.getExterior().isBlank()) {
+            skin.setExterior(Skin.Exterior.valueOf(req.getExterior().toUpperCase()));
+        }
+        if (req.getStattrak() != null) {
+            skin.setStattrak(req.getStattrak());
+        }
     }
 }

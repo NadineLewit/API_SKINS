@@ -3,31 +3,44 @@ package skinsmarket.demo.controller.skin;
 import lombok.Data;
 
 /**
- * DTO para las solicitudes de creación y edición de Skins.
+ * DTO para las solicitudes de creación y edición de Skins (publicaciones de venta).
  *
- * NO incluye id: en creación JPA lo genera automáticamente (auto_increment).
- * En edición el id va en el path (/skins/admin/{id} o /skins/{id}), no en el body.
- * Enviar un id en el body no tiene ningún efecto y genera confusión.
+ * NO incluye id: en creación JPA lo genera automáticamente.
+ *
+ * REGLA DE NEGOCIO:
+ *   - USER (vendedor): catalogoId es OBLIGATORIO. La publicación queda atada a
+ *     un item del catálogo y los atributos visuales (name, description, etc.)
+ *     se completan automáticamente desde ese catálogo, ignorando lo que el
+ *     usuario haya enviado en esos campos.
+ *   - ADMIN: catalogoId es OPCIONAL. Si lo provee, se completa desde el catálogo
+ *     igual que el USER. Si no, usa los datos enviados libremente en este DTO.
  */
 @Data
 public class SkinRequest {
 
-    // Nombre de la skin (ej: "Dragon Lore", "Hyper Beast")
+    /**
+     * ID del item del catálogo sobre el que se publica.
+     * - USER: obligatorio. Si es null, el endpoint devuelve 400.
+     * - ADMIN: opcional.
+     */
+    private Long catalogoId;
+
+    // Nombre de la skin (ignorado si catalogoId no es null)
     private String name;
 
-    // Descripción de la skin
+    // Descripción (ignorada si catalogoId no es null)
     private String description;
 
-    // Precio de la skin
+    // Precio de venta del vendedor
     private Double price;
 
-    // Descuento aplicado (0.0 a 1.0, ej: 0.15 = 15% off). Default 0.
+    // Descuento aplicado por el vendedor (0.0 a 1.0). Default 0.
     private Double discount;
 
-    // Nombre del videojuego (ej: "CS2", "Dota 2")
+    // Nombre del videojuego (ej: "CS2"). Ignorado si catalogoId no es null.
     private String game;
 
-    // URL pública de la imagen
+    // URL pública de imagen (legacy — la imagen actual se sube como multipart).
     private String imageUrl;
 
     // Cantidad disponible en stock

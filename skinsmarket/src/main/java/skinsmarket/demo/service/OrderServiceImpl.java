@@ -40,7 +40,7 @@ public class OrderServiceImpl implements OrderService {
     private UserRepository userRepository;
 
     // =========================================================================
-    // Crear orden desde carrito (nuevo)
+    // Crear orden desde carrito (única forma de crear orden expuesta al cliente)
     // =========================================================================
 
     /**
@@ -87,7 +87,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     // =========================================================================
-    // Crear orden con itemList explícito
+    // Crear orden con itemList explícito (interno — usado por createOrderFromCarrito)
     // =========================================================================
 
     @Override
@@ -184,20 +184,6 @@ public class OrderServiceImpl implements OrderService {
         response.setTotalFinal(totalFinal);
         response.setOrderDetailResponses(detailResponses);
         return response;
-    }
-
-    // =========================================================================
-    // Eliminar orden
-    // =========================================================================
-
-    @Override
-    @Transactional
-    public void deleteOrder(Long orderId, User user) {
-        if (!orderRepository.existsByIdAndUserId(orderId, user.getId())) {
-            throw new IllegalArgumentException(
-                    "Orden no encontrada o no pertenece al usuario: " + orderId);
-        }
-        orderRepository.deleteById(orderId);
     }
 
     // =========================================================================

@@ -10,31 +10,32 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.client.RestTemplate;
 
 import skinsmarket.demo.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
 
 /**
- * Configuración de la infraestructura de autenticación de Spring Security.
+ * Configuración de la infraestructura de autenticación de Spring Security
+ * y otros beans transversales del proyecto.
  *
  * Define los beans necesarios para que Spring Security pueda:
  *   - Cargar usuarios desde la base de datos (UserDetailsService)
  *   - Verificar contraseñas hasheadas (PasswordEncoder)
  *   - Autenticar usuarios (AuthenticationProvider y AuthenticationManager)
+ *
+ * Y un bean de RestTemplate que se usa para consumir APIs externas
+ * (por ejemplo, la API de ByMykel/CSGO-API para sincronizar el catálogo).
  */
 @Configuration
 @RequiredArgsConstructor
 public class ApplicationConfig {
 
-    // Repositorio de usuarios necesario para cargar los datos del usuario autenticado
     private final UserRepository repository;
 
     /**
-     * Define cómo Spring Security carga un usuario dado su username (email).
-     *
-     * Se busca el usuario por email en la base de datos.
-     * Si no existe, lanza UsernameNotFoundException para que Spring devuelva 403.
+     * Carga un usuario por su email para autenticarlo.
      */
     @Bean
     public UserDetailsService userDetailsService() {
@@ -43,10 +44,7 @@ public class ApplicationConfig {
     }
 
     /**
-     * Configura el proveedor de autenticación basado en base de datos (DAO).
-     *
-     * Combina el UserDetailsService (cómo cargar usuarios) con el PasswordEncoder
-     * (cómo verificar contraseñas). Spring Security usa esto para autenticar.
+     * Proveedor de autenticación basado en BD (DAO) + BCrypt.
      */
     @SuppressWarnings("deprecation")
     @Bean
@@ -58,9 +56,7 @@ public class ApplicationConfig {
     }
 
     /**
-     * Expone el AuthenticationManager como bean para poder usarlo en el AuthenticationService.
-     *
-     * Es necesario para realizar la autenticación manual al hacer login.
+     * AuthenticationManager para realizar login manual desde el AuthenticationService.
      */
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config)
@@ -69,14 +65,21 @@ public class ApplicationConfig {
     }
 
     /**
-     * Define el algoritmo de hashing de contraseñas: BCrypt.
-     *
-     * BCrypt es el estándar de la industria para almacenar contraseñas de forma segura.
-     * Genera un salt aleatorio en cada hash, lo que lo hace resistente a ataques
-     * de tabla arco iris (rainbow table attacks).
+     * BCrypt para hashear contraseñas.
      */
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    /**
+     * RestTemplate para consumir APIs externas (en este proyecto, la API pública
+     * de skins de ByMykel/CSGO-API para sincronizar el catálogo).
+     *
+     * Es un bean único reutilizable — se inyecta en SkinCatalogoServiceImpl.
+     */
+    @Bean
+    public RestTemplate restTemplate() {
+        return new RestTemplate();
     }
 }

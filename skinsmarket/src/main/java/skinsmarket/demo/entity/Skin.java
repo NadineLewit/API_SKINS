@@ -7,18 +7,17 @@ import java.time.LocalDateTime;
 import java.util.Base64;
 
 /**
- * Entidad Skin — marketplace de skins de videojuegos.
+ * Entidad Skin — representa una PUBLICACIÓN de venta en el marketplace.
  *
- * CAMBIO (pedido por la profe):
- *   - Se reemplaza imageUrl (String) por image (byte[]) almacenado como BLOB en la BD.
- *   - Al devolver la skin, la imagen se serializa en base64 para que el frontend
- *     la renderice con: <img src={`data:image/jpeg;base64,${skin.imageBase64}`} />
+ * IMPORTANTE: una Skin NO es lo mismo que el item del juego. Es una OFERTA de
+ * un vendedor (USER o ADMIN) sobre un item del catálogo (SkinCatalogo).
+ *   - Un USER solo puede publicar Skin si referencia un SkinCatalogo existente.
+ *   - Un ADMIN puede publicar libre (catalogo = null) o sobre el catálogo.
  *
- * NOTA: tanto el campo `image` (byte[]) como el getter `getImageBase64()` están
- *       anotados con @JsonIgnore para que NO se serialicen en las respuestas JSON.
- *       Esto evita devolver el chorizo de bytes en Insomnia/Postman.
- *       La imagen se guarda en la BD igual; si el frontend la necesita, se puede
- *       exponer un endpoint dedicado tipo GET /skins/{id}/image que devuelva los bytes.
+ * La imagen se almacena como BLOB pero está marcada con @JsonIgnore para no
+ * inundar las respuestas de Insomnia/Postman con base64. Si el frontend la
+ * necesita, se puede exponer un endpoint dedicado o usar la imageUrl del
+ * SkinCatalogo asociado.
  */
 @Entity
 @Data
@@ -54,17 +53,9 @@ public class Skin {
     private LocalDateTime fechaAlta = LocalDateTime.now();
 
     // -------------------------------------------------------------------------
-    // Imagen almacenada como BLOB en la BD
+    // Imagen almacenada como BLOB en la BD (oculta del JSON)
     // -------------------------------------------------------------------------
 
-    /**
-     * Bytes de la imagen de la skin almacenados en la base de datos.
-     *
-     * @Lob indica a Hibernate que este campo se almacena como BLOB (Binary Large Object).
-     * columnDefinition = "LONGBLOB" permite imágenes de hasta 4GB en MySQL.
-     *
-     * @JsonIgnore evita que los bytes crudos aparezcan en las respuestas JSON.
-     */
     @Lob
     @JsonIgnore
     @Column(name = "image", columnDefinition = "LONGBLOB")
@@ -83,6 +74,19 @@ public class Skin {
     @JsonIgnore
     private User vendedor;
 
+    /**
+     * Referencia al item del catálogo de skins reales.
+     *
+     * - OBLIGATORIA cuando un USER publica (validado en el service).
+     * - OPCIONAL cuando un ADMIN publica.
+     *
+     * Permite asociar la publicación de venta con la skin oficial del juego
+     * y heredar sus atributos (nombre, descripción, imagen, rareza, etc.).
+     */
+    @ManyToOne
+    @JoinColumn(name = "catalogo_id")
+    private SkinCatalogo catalogo;
+
     // -------------------------------------------------------------------------
     // Atributos del dominio de skins
     // -------------------------------------------------------------------------
@@ -100,20 +104,12 @@ public class Skin {
     // Métodos utilitarios
     // -------------------------------------------------------------------------
 
-    /**
-     * Precio final aplicando el descuento de la skin.
-     */
+    /** Precio final aplicando el descuento de la skin. */
     public Double getFinalPrice() {
         return price - (price * discount);
     }
 
-    /**
-     * Devuelve la imagen codificada en base64.
-     *
-     * @JsonIgnore evita que este campo aparezca en las respuestas JSON
-     * para mantener Insomnia/Postman legibles. La imagen sigue guardada
-     * en la BD y se puede exponer por un endpoint dedicado si hace falta.
-     */
+    /** Imagen en base64 — oculta del JSON con @JsonIgnore. */
     @JsonIgnore
     public String getImageBase64() {
         if (image == null) return null;
