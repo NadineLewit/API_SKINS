@@ -17,4 +17,14 @@ public class UserRequest {
      * de 15 días desde el último cambio antes de permitir el cambio.
      */
     private String username;
+
+    /**
+     * SteamID64 del usuario — número de 17 dígitos.
+     * Cuando se setea por primera vez (o cambia), se dispara una sincronización
+     * automática del inventario de Steam.
+     */
+    private String steamId64;
+
+    /** Trade URL de Steam para futuras ofertas de intercambio. */
+    private String tradeUrl;
 }

@@ -19,4 +19,10 @@ public class UserResponse {
 
     // Apellido del usuario
     private String lastName;
+
+    // SteamID64 (puede ser null si el usuario no lo configuró)
+    private String steamId64;
+
+    // Trade URL de Steam (puede ser null)
+    private String tradeUrl;
 }

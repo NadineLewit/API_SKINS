@@ -2,6 +2,11 @@ package skinsmarket.demo.controller.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpRequest;
+import org.springframework.http.client.ClientHttpRequestExecution;
+import org.springframework.http.client.ClientHttpRequestInterceptor;
+import org.springframework.http.client.ClientHttpResponse;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -16,17 +21,12 @@ import skinsmarket.demo.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
 
+import java.io.IOException;
+import java.time.Duration;
+
 /**
  * Configuración de la infraestructura de autenticación de Spring Security
  * y otros beans transversales del proyecto.
- *
- * Define los beans necesarios para que Spring Security pueda:
- *   - Cargar usuarios desde la base de datos (UserDetailsService)
- *   - Verificar contraseñas hasheadas (PasswordEncoder)
- *   - Autenticar usuarios (AuthenticationProvider y AuthenticationManager)
- *
- * Y un bean de RestTemplate que se usa para consumir APIs externas
- * (por ejemplo, la API de ByMykel/CSGO-API para sincronizar el catálogo).
  */
 @Configuration
 @RequiredArgsConstructor
@@ -34,18 +34,12 @@ public class ApplicationConfig {
 
     private final UserRepository repository;
 
-    /**
-     * Carga un usuario por su email para autenticarlo.
-     */
     @Bean
     public UserDetailsService userDetailsService() {
         return email -> repository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado"));
     }
 
-    /**
-     * Proveedor de autenticación basado en BD (DAO) + BCrypt.
-     */
     @SuppressWarnings("deprecation")
     @Bean
     public AuthenticationProvider authenticationProvider() {
@@ -55,31 +49,59 @@ public class ApplicationConfig {
         return authenticationProvider;
     }
 
-    /**
-     * AuthenticationManager para realizar login manual desde el AuthenticationService.
-     */
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config)
             throws Exception {
         return config.getAuthenticationManager();
     }
 
-    /**
-     * BCrypt para hashear contraseñas.
-     */
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
     /**
-     * RestTemplate para consumir APIs externas (en este proyecto, la API pública
-     * de skins de ByMykel/CSGO-API para sincronizar el catálogo).
+     * RestTemplate para consumir APIs externas (Steam, ByMykel/CSGO-API, etc.).
      *
-     * Es un bean único reutilizable — se inyecta en SkinCatalogoServiceImpl.
+     * Mejoras críticas:
+     *   1. TIMEOUT EXPLÍCITO: 30s connect + 60s read.
+     *   2. USER-AGENT DE NAVEGADOR: Steam discrimina por UA.
+     *   3. ACCEPT-ENCODING: identity → IMPORTANTE — le decimos a Steam que NO
+     *      comprima la respuesta. Sin esto, Steam manda gzip cuando ve que el
+     *      User-Agent parece un browser, y el RestTemplate (sin SDK extra)
+     *      no descomprime gzip → quedás con bytes binarios en el cuerpo.
+     *      El header "identity" significa "mandame el cuerpo sin compresión".
      */
     @Bean
     public RestTemplate restTemplate() {
-        return new RestTemplate();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout((int) Duration.ofSeconds(30).toMillis());
+        factory.setReadTimeout((int) Duration.ofSeconds(60).toMillis());
+
+        RestTemplate restTemplate = new RestTemplate(factory);
+        restTemplate.getInterceptors().add(new BrowserUserAgentInterceptor());
+        return restTemplate;
+    }
+
+    /**
+     * Interceptor que agrega headers de navegador a cada request del RestTemplate.
+     * IMPORTANTE: usamos Accept-Encoding: identity para que Steam NO nos mande
+     * la respuesta comprimida con gzip (el RestTemplate por default no descomprime).
+     */
+    private static class BrowserUserAgentInterceptor implements ClientHttpRequestInterceptor {
+        @Override
+        public ClientHttpResponse intercept(HttpRequest request, byte[] body,
+                                            ClientHttpRequestExecution execution)
+                throws IOException {
+            request.getHeaders().set("User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) " +
+                    "Gecko/20100101 Firefox/131.0");
+            request.getHeaders().set("Accept",
+                    "application/json, text/plain, */*");
+            request.getHeaders().set("Accept-Language", "en-US,en;q=0.9");
+            // CRÍTICO: identity = sin compresión
+            request.getHeaders().set("Accept-Encoding", "identity");
+            return execution.execute(request, body);
+        }
     }
 }

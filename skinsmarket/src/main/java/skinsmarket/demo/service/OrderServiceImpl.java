@@ -24,36 +24,15 @@ import java.util.List;
 @Service
 public class OrderServiceImpl implements OrderService {
 
-    @Autowired
-    private OrderRepository orderRepository;
+    @Autowired private OrderRepository orderRepository;
+    @Autowired private SkinRepository skinRepository;
+    @Autowired private CuponRepository cuponRepository;
+    @Autowired private CarritoRepository carritoRepository;
+    @Autowired private UserRepository userRepository;
 
-    @Autowired
-    private SkinRepository skinRepository;
+    /** Servicio de eventos para registrar ventas (tracking). */
+    @Autowired private EventoService eventoService;
 
-    @Autowired
-    private CuponRepository cuponRepository;
-
-    @Autowired
-    private CarritoRepository carritoRepository;
-
-    @Autowired
-    private UserRepository userRepository;
-
-    // =========================================================================
-    // Crear orden desde carrito (única forma de crear orden expuesta al cliente)
-    // =========================================================================
-
-    /**
-     * Crea una orden de compra directamente desde el carrito del usuario.
-     *
-     * Flujo:
-     *   1. Busca el usuario por email (del JWT)
-     *   2. Busca su carrito y valida que no esté vacío
-     *   3. Convierte los ítems del carrito a OrderDetailRequest
-     *   4. Delega en createOrder() reutilizando toda la lógica existente
-     *
-     * Ventaja: el frontend no necesita mandar el body — solo el token y el cupón opcional.
-     */
     @Override
     @Transactional
     public OrderResponse createOrderFromCarrito(String email, String codigoCupon)
@@ -69,7 +48,6 @@ public class OrderServiceImpl implements OrderService {
             throw new RuntimeException("El carrito está vacío");
         }
 
-        // Convertir items del carrito a la estructura que espera createOrder()
         List<OrderDetailRequest> items = carrito.getItems().stream()
                 .map(item -> {
                     OrderDetailRequest d = new OrderDetailRequest();
@@ -82,13 +60,8 @@ public class OrderServiceImpl implements OrderService {
         orderRequest.setItemList(items);
         orderRequest.setCodigoCupon(codigoCupon);
 
-        // Reutiliza toda la lógica de validación, descuento de stock y cupón
         return createOrder(user, orderRequest);
     }
-
-    // =========================================================================
-    // Crear orden con itemList explícito (interno — usado por createOrderFromCarrito)
-    // =========================================================================
 
     @Override
     @Transactional
@@ -108,6 +81,10 @@ public class OrderServiceImpl implements OrderService {
         List<OrderDetailResponse> detailResponses = new ArrayList<>();
         double totalPrice = 0.0;
 
+        // Lista temporal para registrar eventos DESPUÉS de persistir la orden
+        // (necesitamos el id de la orden y de la skin para vincular bien)
+        List<Object[]> ventasARegistrar = new ArrayList<>();
+
         for (OrderDetailRequest item : orderRequest.getItemList()) {
             Long skinId = item.getSkinId();
             Skin skin = skinRepository.findById(skinId)
@@ -116,12 +93,10 @@ public class OrderServiceImpl implements OrderService {
             if (!skin.getActive()) {
                 throw new RuntimeException("La skin '" + skin.getName() + "' ya no está disponible");
             }
-
-            if (skin.getVendedor() != null &&
-                    skin.getVendedor().getEmail().equals(user.getEmail())) {
+            if (skin.getVendedor() != null
+                    && skin.getVendedor().getEmail().equals(user.getEmail())) {
                 throw new PropietarioSkinException();
             }
-
             if (item.getQuantity() > skin.getStock()) {
                 throw new NoStockAvailableException();
             }
@@ -145,24 +120,24 @@ public class OrderServiceImpl implements OrderService {
             detailResponses.add(detailResponse);
 
             totalPrice += item.getQuantity() * finalPrice;
+
+            // Encolamos para registrar como evento después
+            ventasARegistrar.add(new Object[]{skin, item.getQuantity(), finalPrice});
         }
 
-        // Aplicar cupón si se proporcionó
+        // Cupón
         double descuentoAplicado = 0.0;
         if (orderRequest.getCodigoCupon() != null && !orderRequest.getCodigoCupon().isBlank()) {
             Cupon cupon = cuponRepository.findByCodigo(orderRequest.getCodigoCupon())
                     .orElseThrow(() -> new RuntimeException("Cupón no encontrado"));
 
-            if (!cupon.getActivo()) {
-                throw new RuntimeException("El cupón no está activo");
-            }
-            if (cupon.getFechaVencimiento() != null &&
-                    cupon.getFechaVencimiento().isBefore(LocalDate.now())) {
+            if (!cupon.getActivo()) throw new RuntimeException("El cupón no está activo");
+            if (cupon.getFechaVencimiento() != null
+                    && cupon.getFechaVencimiento().isBefore(LocalDate.now())) {
                 throw new RuntimeException("El cupón está vencido");
             }
 
             descuentoAplicado = cupon.getDescuento();
-
             if (!cupon.getMultiUso()) {
                 cupon.setActivo(false);
                 cuponRepository.save(cupon);
@@ -175,6 +150,17 @@ public class OrderServiceImpl implements OrderService {
         order.setTotalFinal(totalFinal);
         orderRepository.save(order);
 
+        // 📊 Registrar eventos SALE para el ranking de vendedores y skins más vendidas.
+        // Hacemos esto al final, después de que la orden está persistida.
+        // El EventoService es defensivo y no propaga excepciones, así que si
+        // falla acá no rompe la orden ya creada.
+        for (Object[] venta : ventasARegistrar) {
+            Skin skin = (Skin) venta[0];
+            int cantidad = (int) venta[1];
+            double precio = (double) venta[2];
+            eventoService.registrarVenta(order, skin, cantidad, precio);
+        }
+
         OrderResponse response = new OrderResponse();
         response.setId(order.getId());
         response.setEmail(user.getEmail());
@@ -186,10 +172,6 @@ public class OrderServiceImpl implements OrderService {
         return response;
     }
 
-    // =========================================================================
-    // Consultas
-    // =========================================================================
-
     @Override
     public List<Order> findAllOrders() {
         return orderRepository.findAll();
@@ -199,9 +181,7 @@ public class OrderServiceImpl implements OrderService {
     public List<OrderResponse> getOrdersForUser(User user) {
         List<Order> orders = orderRepository.findByUserIdOrderByDateDesc(user.getId());
         List<OrderResponse> responses = new ArrayList<>();
-        for (Order order : orders) {
-            responses.add(mapToOrderResponse(order));
-        }
+        for (Order order : orders) responses.add(mapToOrderResponse(order));
         return responses;
     }
 
@@ -212,10 +192,6 @@ public class OrderServiceImpl implements OrderService {
                 .map(this::mapToOrderResponse)
                 .orElse(null);
     }
-
-    // =========================================================================
-    // Helper privado
-    // =========================================================================
 
     private OrderResponse mapToOrderResponse(Order order) {
         OrderResponse resp = new OrderResponse();

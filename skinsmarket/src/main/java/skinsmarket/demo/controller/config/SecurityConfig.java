@@ -23,16 +23,15 @@ import java.util.Arrays;
 /**
  * Configuración de seguridad de Spring Security para el marketplace de skins.
  *
- * CAMBIOS RECIENTES:
- *   - Las skins ya NO se eliminan con DELETE: ahora se inactivan con
- *     PUT /skins/{id}/inactivar y PUT /skins/admin/inactivar/{id}.
- *   - Se agregó el catálogo maestro de skins:
- *     · GET  /catalogo/**           → público (cualquiera puede ver el catálogo)
- *     · POST /catalogo              → ADMIN (crear manualmente)
- *     · POST /catalogo/sincronizar  → ADMIN (importar desde la API de ByMykel)
- *     · DELETE /catalogo/{id}       → ADMIN
+ * REGLAS NUEVAS (importantes):
+ *   - POST /skins/with-image       → SOLO ADMIN (era USER, se bloqueó porque
+ *                                    permitía publicar skins ficticias).
+ *   - PUT  /skins/{id}/with-image  → autenticado (vendedor edita su publicación,
+ *                                    se valida la propiedad en el service).
+ *   - PUT  /skins/{id}/inactivar   → autenticado (vendedor inactiva la suya).
  *
- * Política de sesiones: STATELESS (sin estado de sesión en servidor, todo via JWT).
+ * Los USER ahora publican exclusivamente vía /inventario/{id}/publicar,
+ * que requiere que el item esté en su inventario REAL de Steam.
  */
 @Configuration
 @EnableWebSecurity
@@ -58,14 +57,17 @@ public class SecurityConfig {
                 .requestMatchers("/categories").permitAll()
                 .requestMatchers("/skins/get/**").permitAll()
                 .requestMatchers("/uploads/**").permitAll()
+                .requestMatchers("/historial/**").permitAll()
+                .requestMatchers("/ranking/**").permitAll()
 
                 // ── Catálogo: GET público, escritura solo ADMIN ─────────────────
-                // Todos pueden consultar el catálogo (es la "base de datos de skins")
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/catalogo").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/catalogo/**").permitAll()
-                // Solo ADMIN puede modificar el catálogo (crear, sincronizar, eliminar)
                 .requestMatchers(org.springframework.http.HttpMethod.POST,   "/catalogo/**").hasAnyAuthority(Role.ADMIN.name())
                 .requestMatchers(org.springframework.http.HttpMethod.DELETE, "/catalogo/**").hasAnyAuthority(Role.ADMIN.name())
+
+                // ── Inventario de Steam: USER y ADMIN autenticados ──────────────
+                .requestMatchers("/inventario/**").hasAnyAuthority(Role.USER.name(), Role.ADMIN.name())
 
                 // ── Rutas exclusivas de ADMIN ───────────────────────────────────
                 .requestMatchers("/categories/**").hasAnyAuthority(Role.ADMIN.name())
@@ -74,23 +76,23 @@ public class SecurityConfig {
                 .requestMatchers("/cupones/**").hasAnyAuthority(Role.ADMIN.name())
                 .requestMatchers("/api/v1/admin/**").hasAnyAuthority(Role.ADMIN.name())
 
-                // ── Rutas de VENDEDOR (USER autenticado puede publicar y gestionar sus skins) ──
-                // POST /skins/with-image     → publicar nueva skin (catalogoId obligatorio para USER)
-                // PUT  /skins/{id}/with-image → editar su propia skin
-                // PUT  /skins/{id}/inactivar  → inactivar su propia skin (baja lógica)
-                .requestMatchers(org.springframework.http.HttpMethod.POST,   "/skins/with-image").hasAnyAuthority(Role.USER.name(), Role.ADMIN.name())
+                // ── Skins (vendedor) ────────────────────────────────────────────
+                // POST /skins/with-image: SOLO ADMIN — los USER NO pueden publicar
+                // skins libres. Si llega un POST, el controller responde 403 con un
+                // mensaje claro indicando que usen /inventario/{id}/publicar.
+                .requestMatchers(org.springframework.http.HttpMethod.POST,   "/skins/with-image").hasAnyAuthority(Role.ADMIN.name())
+                // PUT y PUT inactivar siguen abiertos para USER (edita/baja sus propias)
                 .requestMatchers(org.springframework.http.HttpMethod.PUT,    "/skins/*/with-image").hasAnyAuthority(Role.USER.name(), Role.ADMIN.name())
                 .requestMatchers(org.springframework.http.HttpMethod.PUT,    "/skins/*/inactivar").hasAnyAuthority(Role.USER.name(), Role.ADMIN.name())
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/skins/mis-skins").authenticated()
 
-                // ── Carrito y órdenes: USER y ADMIN ─────────────────────────────
+                // ── Carrito y órdenes ───────────────────────────────────────────
                 .requestMatchers("/carrito/**").hasAnyAuthority(Role.USER.name(), Role.ADMIN.name())
                 .requestMatchers("/order/**").hasAnyAuthority(Role.USER.name(), Role.ADMIN.name())
 
-                // ── Perfil de usuario: cualquier autenticado ────────────────────
+                // ── Perfil ──────────────────────────────────────────────────────
                 .requestMatchers("/api/v1/users/**").authenticated()
 
-                // Cualquier otra ruta requiere autenticación válida
                 .anyRequest().authenticated()
             )
             .sessionManagement(session -> session.sessionCreationPolicy(STATELESS))

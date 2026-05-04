@@ -15,19 +15,17 @@ import skinsmarket.demo.entity.Skin;
 import skinsmarket.demo.service.SkinService;
 
 /**
- * Controlador REST para Skins.
+ * Controlador REST para Skins (publicaciones de venta).
  *
- * REGLA: Toda skin requiere imagen obligatoria.
- * Los endpoints de creación y edición usan multipart/form-data.
- *   - Parte "skin"  → JSON con los datos de la skin (como texto)
- *   - Parte "image" → archivo de imagen (MultipartFile)
+ * REGLA DE NEGOCIO PRINCIPAL:
+ *   - Los USER (vendedores comunes) NO pueden publicar skins libres ni
+ *     directamente desde el catálogo. La ÚNICA forma de publicar como USER
+ *     es desde el inventario real de Steam: POST /inventario/{itemId}/publicar
+ *     Esto evita que cualquiera pueda vender una skin que no tiene.
+ *   - Los ADMIN sí pueden crear/editar libremente (para casos especiales o testing).
  *
  * BAJA LÓGICA: las skins NO se eliminan físicamente porque tienen FK desde
- * order_details. En su lugar se inactivan (active = false) usando PUT,
- * que es semánticamente correcto para una modificación de atributo.
- *
- * Todas las respuestas se devuelven con un ApiResponse uniforme:
- *   { "message": "...", "data": { ... opcional ... } }
+ * order_details. En su lugar se inactivan (active = false) usando PUT.
  */
 @RestController
 @RequestMapping("skins")
@@ -43,6 +41,7 @@ public class SkinController {
     /**
      * Crea una skin con imagen obligatoria.
      * POST /skins/admin/create-with-image
+     * Solo ADMIN.
      */
     @PostMapping(value = "/admin/create-with-image",
                  consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -66,6 +65,7 @@ public class SkinController {
     /**
      * Edita una skin con imagen obligatoria.
      * PUT /skins/admin/edit/{id}/with-image
+     * Solo ADMIN.
      */
     @PutMapping(value = "/admin/edit/{id}/with-image",
                 consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -94,9 +94,6 @@ public class SkinController {
     /**
      * Inactiva una skin (baja lógica: active = false).
      * PUT /skins/admin/inactivar/{id}
-     *
-     * Antes era DELETE, pero al ser una baja lógica (modificación de atributo)
-     * el verbo correcto es PUT.
      */
     @PutMapping("/admin/inactivar/{id}")
     public ResponseEntity<?> inactivarSkin(@PathVariable Long id) {
@@ -190,34 +187,13 @@ public class SkinController {
     }
 
     // =========================================================================
-    // ENDPOINTS DE VENDEDOR (USER autenticado)
+    // ENDPOINTS DE VENDEDOR (USER)
     // =========================================================================
 
     /**
-     * Publica una skin con imagen obligatoria.
-     * POST /skins/with-image
+     * GET /skins/mis-skins — lista las publicaciones del usuario autenticado.
+     * Sigue funcionando para que el USER vea qué tiene publicado.
      */
-    @PostMapping(value = "/with-image",
-                 consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<?> publicarSkinConImagen(
-            Authentication auth,
-            @RequestPart("skin") String skinJson,
-            @RequestPart("image") MultipartFile image) {
-        try {
-            ObjectMapper mapper = new ObjectMapper();
-            SkinRequest skinRequest = mapper.readValue(skinJson, SkinRequest.class);
-            byte[] imageBytes = image.getBytes();
-            Skin result = skinService.createSkinAsVendedor(skinRequest, auth.getName(), imageBytes);
-            return ResponseEntity.ok(ApiResponse.of("Skin publicada exitosamente", result));
-        } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(ApiResponse.of(e.getMessage()));
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError()
-                    .body(ApiResponse.of("Error al publicar la skin: " + e.getMessage()));
-        }
-    }
-
-    /** GET /skins/mis-skins */
     @GetMapping("/mis-skins")
     public ResponseEntity<?> misSkins(Authentication auth) {
         List<Skin> skins = skinService.getSkinsByOwner(auth.getName());
@@ -226,8 +202,12 @@ public class SkinController {
     }
 
     /**
-     * Edita una skin propia con imagen obligatoria.
+     * Edita una skin propia.
      * PUT /skins/{id}/with-image
+     *
+     * Sigue habilitado para que el vendedor pueda actualizar PRECIO y stock
+     * de sus publicaciones existentes (las que originalmente publicó desde
+     * su inventario). NO permite cambiar el catálogo asociado.
      */
     @PutMapping(value = "/{id}/with-image",
                 consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -255,11 +235,8 @@ public class SkinController {
     }
 
     /**
-     * Inactiva una skin propia (baja lógica: active = false).
+     * Inactiva una skin propia (baja lógica).
      * PUT /skins/{id}/inactivar
-     *
-     * Antes era DELETE, pero al ser una baja lógica (modificación de atributo)
-     * el verbo correcto es PUT. Solo el dueño puede inactivar su propia skin.
      */
     @PutMapping("/{id}/inactivar")
     public ResponseEntity<?> inactivarMiSkin(Authentication auth, @PathVariable Long id) {
@@ -274,5 +251,33 @@ public class SkinController {
             return ResponseEntity.status(403)
                     .body(ApiResponse.of("No tenés permiso para inactivar esta skin"));
         }
+    }
+
+    /**
+     * ❌ ENDPOINT BLOQUEADO INTENCIONALMENTE
+     *
+     * POST /skins/with-image — usado anteriormente para publicar skins libres.
+     *
+     * Esta operación se eliminó del flujo de USER porque permitía publicar
+     * skins ficticias sin tenerlas realmente en el inventario de Steam.
+     *
+     * Para publicar como USER, ahora hay que pasar por el inventario real:
+     *   POST /inventario/sync                    ← sincroniza tu inventario de Steam
+     *   GET  /inventario                         ← ves los items reales que tenés
+     *   POST /inventario/{itemId}/publicar       ← publicás uno con 1 click
+     *
+     * Devuelve 403 con un mensaje explicativo en lugar de 404, para guiar
+     * al desarrollador del frontend hacia el flujo correcto.
+     */
+    @PostMapping(value = "/with-image",
+                 consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> publicarSkinDeshabilitado(
+            Authentication auth,
+            @RequestPart(value = "skin", required = false) String skinJson,
+            @RequestPart(value = "image", required = false) MultipartFile image) {
+        return ResponseEntity.status(403).body(ApiResponse.of(
+                "Los usuarios solo pueden publicar skins de su inventario real de Steam. " +
+                "Usá POST /inventario/{itemId}/publicar después de sincronizar tu inventario."
+        ));
     }
 }

@@ -6,9 +6,8 @@ import lombok.Data;
 
 /**
  * DTO genérico para respuestas consistentes de la API.
- *
  * Estructura: { "message": "...", "data": { ... } }
- * El campo "data" se omite del JSON si es null.
+ * data se omite del JSON si es null.
  */
 @Data
 @AllArgsConstructor

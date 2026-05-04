@@ -49,6 +49,31 @@ public class User implements UserDetails {
     @Column(name = "username_changed_at")
     private LocalDateTime usernameChangedAt;
 
+    /**
+     * SteamID64 del usuario — número de 17 dígitos que identifica unívocamente
+     * una cuenta en Steam (ej: "76561198012345678").
+     *
+     * Se usa para LEER el inventario público vía:
+     *   GET https://steamcommunity.com/inventory/{steamId64}/730/2
+     *
+     * Es opcional: el usuario puede usar el marketplace sin Steam, pero si
+     * quiere ver/sincronizar su inventario debe configurarlo.
+     */
+    @Column(name = "steam_id_64", length = 30)
+    private String steamId64;
+
+    /**
+     * Trade URL de Steam — link tipo:
+     *   https://steamcommunity.com/tradeoffer/new/?partner=12345&token=ABC
+     *
+     * NO se usa para leer inventario (eso es con steamId64). Se guarda para
+     * futuras funcionalidades de envío de ofertas de trade reales.
+     *
+     * Es opcional: solo necesario si el usuario quiere recibir ofertas concretas.
+     */
+    @Column(name = "trade_url", length = 500)
+    private String tradeUrl;
+
     @OneToMany(mappedBy = "user")
     @JsonIgnore
     private List<Order> orders;
