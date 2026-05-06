@@ -1,0 +1,1305 @@
+type: collection.insomnia.rest/5.0
+name: TPO Skins Marketplace - Grupo 7
+meta:
+  id: wrk_skins_marketplace_g7
+  created: 1778200000000
+  modified: 1778200000000
+  description: "API REST del marketplace de skins CS2 - UADE 1C 2026"
+collection:
+  - name: 🔐 Auth
+    meta:
+      id: fld_auth_001
+      created: 1778200000000
+      modified: 1778200000000
+      sortKey: -1778200000000
+      description: "Registro y autenticación (sin token)"
+    children:
+      - url: "{{ base_url }}/api/v1/auth/register"
+        name: "[SIN TOKEN] Registro de usuario nuevo"
+        meta:
+          id: req_auth_register
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 Crea un usuario nuevo. Devuelve JWT en accessToken."
+          sortKey: -1778200000001
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "username": "nuevoUser",
+              "email": "nuevo@mail.com",
+              "password": "1234",
+              "firstName": "Nuevo",
+              "lastName": "Usuario"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/api/v1/auth/authenticate"
+        name: "[SIN TOKEN] Login ADMIN"
+        meta:
+          id: req_auth_login_admin
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 Copiá accessToken en token_admin del environment"
+          sortKey: -1778200000002
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "email": "admin@mail.com",
+              "password": "admin123"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/api/v1/auth/authenticate"
+        name: "[SIN TOKEN] Login USER común"
+        meta:
+          id: req_auth_login_user
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 Copiá accessToken en token_user"
+          sortKey: -1778200000003
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "email": "user@mail.com",
+              "password": "user123"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/api/v1/auth/authenticate"
+        name: "[SIN TOKEN] Login Amigo (con Steam)"
+        meta:
+          id: req_auth_login_amigo
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 Copiá accessToken en token_amigo. Tiene SteamID configurado."
+          sortKey: -1778200000004
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "email": "amigo@mail.com",
+              "password": "amigo123"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: 👤 Perfil
+    meta:
+      id: fld_user_001
+      created: 1778200000000
+      modified: 1778200000000
+      sortKey: -1778200000010
+      description: "Datos del perfil propio"
+    children:
+      - url: "{{ base_url }}/api/v1/users/me"
+        name: "[USER] Ver mi perfil"
+        meta:
+          id: req_user_me_get
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 email, firstName, lastName, steamId64, tradeUrl"
+          sortKey: -1778200000011
+        method: GET
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_amigo }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/api/v1/users/me"
+        name: "[USER] Actualizar SteamID + tradeUrl"
+        meta:
+          id: req_user_me_steam
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 Dispara sync auto del inventario"
+          sortKey: -1778200000012
+        method: PUT
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "steamId64": "76561198893771909",
+              "tradeUrl": "https://steamcommunity.com/tradeoffer/new/?partner=933506181&token=AYLmlJwC"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ token_amigo }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/api/v1/users/me"
+        name: "[USER] Cambiar nombre/apellido"
+        meta:
+          id: req_user_me_name
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 Cualquier campo enviado se actualiza. Username solo cada 15 días."
+          sortKey: -1778200000013
+        method: PUT
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "firstName": "Juan",
+              "lastName": "Pérez"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ token_user }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: 📚 Catálogo (ByMykel)
+    meta:
+      id: fld_catalogo_001
+      created: 1778200000000
+      modified: 1778200000000
+      sortKey: -1778200000020
+      description: "Catálogo maestro paginado (~22.000 skins)"
+    children:
+      - url: "{{ base_url }}/catalogo/count"
+        name: "[SIN TOKEN] Contar catálogo"
+        meta:
+          id: req_cat_count
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 Cuántas skins hay (verificar que el seeder cargó)"
+          sortKey: -1778200000021
+        method: GET
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/catalogo?page=0&size=20"
+        name: "[SIN TOKEN] Listar paginado"
+        meta:
+          id: req_cat_list
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 Default page=0, size=50, max size=500"
+          sortKey: -1778200000022
+        method: GET
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/catalogo/{{ catalogo_id }}"
+        name: "[SIN TOKEN] Detalle item del catálogo"
+        meta:
+          id: req_cat_detail
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 Setear catalogo_id en environment"
+          sortKey: -1778200000023
+        method: GET
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/catalogo/buscar?nombre=Motorized"
+        name: "[SIN TOKEN] Buscar por nombre"
+        meta:
+          id: req_cat_search
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 Búsqueda parcial case-insensitive (max 200)"
+          sortKey: -1778200000024
+        method: GET
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/catalogo/filtrar?arma=AK-47"
+        name: "[SIN TOKEN] Filtrar por arma"
+        meta:
+          id: req_cat_filter_arma
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 Filtro parcial case-insensitive"
+          sortKey: -1778200000025
+        method: GET
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/catalogo/filtrar?categoria=Rifle"
+        name: "[SIN TOKEN] Filtrar por categoría"
+        meta:
+          id: req_cat_filter_cat
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 Categorías: Rifle, Pistol, Knife, SMG, Shotgun, Sniper Rifle, etc."
+          sortKey: -1778200000026
+        method: GET
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/catalogo/filtrar?arma=AK-47&categoria=Rifle"
+        name: "[SIN TOKEN] Filtrar combinado"
+        meta:
+          id: req_cat_filter_combo
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 Combinación de arma + categoría"
+          sortKey: -1778200000027
+        method: GET
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/catalogo/sincronizar"
+        name: "[ADMIN] Re-sincronizar TODAS las skins"
+        meta:
+          id: req_cat_sync
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔴 ADMIN — Trae ~22000. Tarda 2-3 min. Usar solo si se vació la BD."
+          sortKey: -1778200000028
+        method: POST
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_admin }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/catalogo/sincronizar?limit=500"
+        name: "[ADMIN] Re-sincronizar limitado"
+        meta:
+          id: req_cat_sync_limit
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔴 ADMIN — Solo las primeras N skins (rápido para testing)"
+          sortKey: -1778200000029
+        method: POST
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_admin }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: 🎒 Inventario Steam
+    meta:
+      id: fld_inv_001
+      created: 1778200000000
+      modified: 1778200000000
+      sortKey: -1778200000030
+      description: "Inventario REAL de Steam"
+    children:
+      - url: "{{ base_url }}/inventario/status"
+        name: "[USER] Status inventario ⭐"
+        meta:
+          id: req_inv_status
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 Verifica steamId, items en BD, último sync"
+          sortKey: -1778200000031
+        method: GET
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_amigo }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/inventario/sync"
+        name: "[USER] Sincronizar contra Steam"
+        meta:
+          id: req_inv_sync
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: |-
+            🔵 Llama a Steam con count=2000 (count=5000 dispara 400).
+            Si tarda más de 30s, Steam está con rate-limit.
+          sortKey: -1778200000032
+        method: POST
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_amigo }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/inventario"
+        name: "[USER] Listar mi inventario"
+        meta:
+          id: req_inv_list
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 Items sincronizados desde Steam"
+          sortKey: -1778200000033
+        method: GET
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_amigo }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/inventario/debug"
+        name: "[USER] DEBUG inventario ⭐"
+        meta:
+          id: req_inv_debug
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: |-
+            🔵 ⭐ Endpoint clave para defensa.
+            Muestra publicabilidad por item (con catálogo, trade lock, etc).
+          sortKey: -1778200000034
+        method: GET
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_amigo }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/inventario/1/publicar"
+        name: "[USER] Publicar item del inventario"
+        meta:
+          id: req_inv_publish
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: |-
+            🔵 Reemplazá 1 por el ID del InventarioItem (NO el assetId).
+            Solo publicables (con catálogo + sin trade lock).
+          sortKey: -1778200000035
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "price": 25.50,
+              "discount": 0.0
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ token_amigo }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: 🎮 Skins (publicaciones)
+    meta:
+      id: fld_skins_001
+      created: 1778200000000
+      modified: 1778200000000
+      sortKey: -1778200000040
+      description: "Marketplace - publicaciones de venta"
+    children:
+      - url: "{{ base_url }}/skins/get/all"
+        name: "[SIN TOKEN] Catálogo público"
+        meta:
+          id: req_skins_all
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 active=true con stock>0"
+          sortKey: -1778200000041
+        method: GET
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/skins/get/1"
+        name: "[SIN TOKEN] Detalle skin"
+        meta:
+          id: req_skins_get
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 Reemplazar 1 por id real"
+          sortKey: -1778200000042
+        method: GET
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/skins/get/category?name=Rifle"
+        name: "[SIN TOKEN] Filtrar por categoría"
+        meta:
+          id: req_skins_category
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 La categoría sale del catalogo.categoryName"
+          sortKey: -1778200000043
+        method: GET
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/skins/get/price?min=10&max=100"
+        name: "[SIN TOKEN] Filtrar por precio"
+        meta:
+          id: req_skins_price
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 ?min y/o ?max"
+          sortKey: -1778200000044
+        method: GET
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/skins/get/search?name=AK"
+        name: "[SIN TOKEN] Buscar por nombre"
+        meta:
+          id: req_skins_search
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 Búsqueda parcial"
+          sortKey: -1778200000045
+        method: GET
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/skins/admin/all"
+        name: "[ADMIN] Listar TODAS (incluye inactivas)"
+        meta:
+          id: req_skins_admin_all
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔴 ADMIN — ?includeInactive=true"
+          sortKey: -1778200000046
+        method: GET
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_admin }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/skins/admin/create"
+        name: "[ADMIN] Crear skin (con catalogoId)"
+        meta:
+          id: req_skins_admin_create
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔴 ADMIN — Hereda nombre/imagen del catálogo"
+          sortKey: -1778200000047
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "catalogoId": 1,
+              "price": 25.99,
+              "stock": 5,
+              "discount": 0.0,
+              "rareza": "ROSA",
+              "exterior": "ALGO_DESGASTADO",
+              "stattrak": false
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ token_admin }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/skins/admin/edit/1"
+        name: "[ADMIN] Editar skin"
+        meta:
+          id: req_skins_admin_edit
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔴 ADMIN"
+          sortKey: -1778200000048
+        method: PUT
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "price": 29.99,
+              "stock": 8,
+              "discount": 0.1,
+              "rareza": "ROSA",
+              "exterior": "CASI_NUEVO",
+              "stattrak": false
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ token_admin }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/skins/admin/inactivar/1"
+        name: "[ADMIN] Inactivar skin"
+        meta:
+          id: req_skins_admin_inactivar
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔴 ADMIN — Baja lógica (active=false)"
+          sortKey: -1778200000049
+        method: PUT
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_admin }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/skins/mis-skins"
+        name: "[USER] Mis skins publicadas"
+        meta:
+          id: req_skins_mis
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 Skins que el USER tiene publicadas"
+          sortKey: -1778200000050
+        method: GET
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_amigo }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/skins/1"
+        name: "[USER] Editar mi skin"
+        meta:
+          id: req_skins_user_edit
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 Vendedor edita precio/stock/descuento de su publicación"
+          sortKey: -1778200000051
+        method: PUT
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "price": 22.50,
+              "stock": 1,
+              "discount": 0.05
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ token_amigo }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/skins/1/inactivar"
+        name: "[USER] Inactivar mi skin"
+        meta:
+          id: req_skins_user_inactivar
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 Vendedor inactiva su propia skin"
+          sortKey: -1778200000052
+        method: PUT
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_amigo }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: 🛒 Carrito
+    meta:
+      id: fld_cart_001
+      created: 1778200000000
+      modified: 1778200000000
+      sortKey: -1778200000060
+      description: "Carrito de compras"
+    children:
+      - url: "{{ base_url }}/carrito"
+        name: "[USER] Ver mi carrito"
+        meta:
+          id: req_cart_get
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵"
+          sortKey: -1778200000061
+        method: GET
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_user }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/carrito/skins/1?cantidad=1"
+        name: "[USER] Agregar skin al carrito"
+        meta:
+          id: req_cart_add
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 PATCH agrega o suma cantidad si ya estaba"
+          sortKey: -1778200000062
+        method: PATCH
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_user }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/carrito/items/1?cantidad=3"
+        name: "[USER] Cambiar cantidad"
+        meta:
+          id: req_cart_qty
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 Modifica la cantidad de un item específico"
+          sortKey: -1778200000063
+        method: PUT
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_user }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/carrito/items/1"
+        name: "[USER] Quitar item"
+        meta:
+          id: req_cart_del_item
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 Elimina un item del carrito"
+          sortKey: -1778200000064
+        method: DELETE
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_user }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/carrito"
+        name: "[USER] Vaciar carrito"
+        meta:
+          id: req_cart_clear
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 Borra todos los items"
+          sortKey: -1778200000065
+        method: DELETE
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_user }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: 📋 Órdenes
+    meta:
+      id: fld_order_001
+      created: 1778200000000
+      modified: 1778200000000
+      sortKey: -1778200000070
+      description: "Compras del usuario"
+    children:
+      - url: "{{ base_url }}/order/from-carrito"
+        name: "[USER] Confirmar compra"
+        meta:
+          id: req_order_from_cart
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 Soporta ?codigoCupon=PROMO10 opcional"
+          sortKey: -1778200000071
+        method: POST
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_user }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/order/from-carrito?codigoCupon=PROMO10"
+        name: "[USER] Confirmar compra con cupón"
+        meta:
+          id: req_order_from_cart_cupon
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 Aplica el descuento del cupón al total"
+          sortKey: -1778200000072
+        method: POST
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_user }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/order/me"
+        name: "[USER] Mis órdenes"
+        meta:
+          id: req_order_mine
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 Historial de compras propias"
+          sortKey: -1778200000073
+        method: GET
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_user }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/order/1"
+        name: "[USER] Detalle orden"
+        meta:
+          id: req_order_detail
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 Solo si es orden propia"
+          sortKey: -1778200000074
+        method: GET
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_user }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: 🏷️ Cupones
+    meta:
+      id: fld_cupon_001
+      created: 1778200000000
+      modified: 1778200000000
+      sortKey: -1778200000080
+      description: "Cupones de descuento"
+    children:
+      - url: "{{ base_url }}/cupones"
+        name: "[ADMIN] Crear cupón"
+        meta:
+          id: req_cupon_create
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔴 descuento entre 0.0 y 1.0 (0.10 = 10%)"
+          sortKey: -1778200000081
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "codigo": "PROMO10",
+              "descuento": 0.10,
+              "activo": true,
+              "multiUso": true,
+              "fechaVencimiento": "2026-12-31"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ token_admin }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/cupones"
+        name: "[ADMIN] Listar cupones"
+        meta:
+          id: req_cupon_list
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔴 ADMIN"
+          sortKey: -1778200000082
+        method: GET
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_admin }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/cupones/validar?codigo=PROMO10"
+        name: "[USER] Validar cupón"
+        meta:
+          id: req_cupon_validar
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 USER+ADMIN — Valida si el cupón es aplicable"
+          sortKey: -1778200000083
+        method: GET
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_user }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/cupones/1"
+        name: "[ADMIN] Eliminar cupón"
+        meta:
+          id: req_cupon_del
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔴 ADMIN"
+          sortKey: -1778200000084
+        method: DELETE
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_admin }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: 📊 Rankings y Eventos
+    meta:
+      id: fld_ranking_001
+      created: 1778200000000
+      modified: 1778200000000
+      sortKey: -1778200000085
+      description: "Rankings y tracking de eventos"
+    children:
+      - url: "{{ base_url }}/ranking/vendedores?limit=10"
+        name: "[SIN TOKEN] Top vendedores"
+        meta:
+          id: req_rank_sellers
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 Top N vendedores por ventas"
+          sortKey: -1778200000086
+        method: GET
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/ranking/mas-vendidas"
+        name: "[SIN TOKEN] Skins más vendidas"
+        meta:
+          id: req_rank_sold
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓"
+          sortKey: -1778200000087
+        method: GET
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/ranking/mas-vistas"
+        name: "[SIN TOKEN] Skins más vistas"
+        meta:
+          id: req_rank_views
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓"
+          sortKey: -1778200000088
+        method: GET
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/historial/skin/1"
+        name: "[SIN TOKEN] Historial de una skin"
+        meta:
+          id: req_hist_skin
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 Eventos de una publicación específica"
+          sortKey: -1778200000089
+        method: GET
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/historial/catalogo/1?dias=30"
+        name: "[SIN TOKEN] Historial de un item del catálogo"
+        meta:
+          id: req_hist_cat
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 Histórico de precio agregado por catálogo"
+          sortKey: -1778200000090
+        method: GET
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+  - name: 🛡️ Panel Admin
+    meta:
+      id: fld_admin_001
+      created: 1778200000000
+      modified: 1778200000000
+      sortKey: -1778200000095
+      description: "Funciones del ADMIN"
+    children:
+      - url: "{{ base_url }}/api/v1/admin/usuarios"
+        name: "[ADMIN] Listar todos los usuarios"
+        meta:
+          id: req_admin_users
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔴 ADMIN"
+          sortKey: -1778200000096
+        method: GET
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_admin }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/api/v1/admin/usuarios/2/rol"
+        name: "[ADMIN] Cambiar rol de usuario"
+        meta:
+          id: req_admin_role
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔴 ADMIN — Reemplazá 2 por id real"
+          sortKey: -1778200000097
+        method: PUT
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "nuevoRol": "ADMIN"
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ token_admin }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/api/v1/admin/orders"
+        name: "[ADMIN] Listar todas las órdenes"
+        meta:
+          id: req_admin_orders
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔴 ADMIN"
+          sortKey: -1778200000098
+        method: GET
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_admin }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+environments:
+  name: Base Environment
+  meta:
+    id: env_base
+    created: 1778200000000
+    modified: 1778200000000
+    isPrivate: false
+  data:
+    base_url: "http://localhost:4003"
+    token_admin: ""
+    token_user: ""
+    token_amigo: ""
+    catalogo_id: "1"
