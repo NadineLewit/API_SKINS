@@ -5,36 +5,39 @@ import skinsmarket.demo.entity.SkinCatalogo;
 
 import java.util.List;
 
+/**
+ * Servicio del catálogo maestro de skins reales de CS2.
+ *
+ * Las skins del catálogo se importan desde la API pública de ByMykel/CSGO-API
+ * (~22.000 skins). El catálogo se usa para:
+ *   - Que un USER al publicar una skin desde su inventario herede los datos
+ *     reales (nombre, descripción, imagen).
+ *   - Que el catálogo público (/catalogo) sea explorable por cualquier visitante.
+ */
 public interface SkinCatalogoService {
 
     /**
-     * Importa skins desde la API pública de ByMykel/CSGO-API y las persiste en la BD.
-     * Si una skin ya existe (matcheada por externalId) se omite, no se duplica.
+     * Sincroniza el catálogo desde la API de ByMykel.
      *
-     * @param limit cantidad máxima de skins a importar en esta corrida (0 o null = todas).
-     *              Recomendado limitarlo para no traer 30K registros la primera vez.
-     * @return cantidad de skins efectivamente insertadas en la BD.
+     * @param limit cantidad máxima de skins a importar.
+     *              Si limit ≤ 0, importa TODAS las skins disponibles (~22.000).
+     * @return cantidad de skins efectivamente insertadas (no actualizaciones).
      */
-    int sincronizarDesdeApi(Integer limit);
+    int sincronizarDesdeApi(int limit);
 
-    /** Crea manualmente un item del catálogo (para casos especiales del ADMIN). */
-    SkinCatalogo crear(SkinCatalogoRequest request);
+    List<SkinCatalogo> listarTodos();
 
-    /** Lista todo el catálogo. */
-    List<SkinCatalogo> listar();
-
-    /** Obtiene un item del catálogo por su ID interno. */
     SkinCatalogo obtenerPorId(Long id);
 
-    /** Búsqueda por nombre parcial. */
     List<SkinCatalogo> buscarPorNombre(String nombre);
 
-    /** Filtro por arma (ej: "AK-47"). */
-    List<SkinCatalogo> filtrarPorArma(String weapon);
+    /**
+     * Filtra el catálogo por arma y/o categoría.
+     * Si ambos son null/blank → devuelve lista vacía.
+     */
+    List<SkinCatalogo> filtrar(String arma, String categoria);
 
-    /** Filtro por categoría (ej: "Rifles"). */
-    List<SkinCatalogo> filtrarPorCategoria(String categoria);
+    SkinCatalogo crear(SkinCatalogoRequest request);
 
-    /** Elimina un item del catálogo por su ID. */
-    void eliminar(Long id);
+    boolean eliminar(Long id);
 }

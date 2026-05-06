@@ -61,16 +61,22 @@ public class ApplicationConfig {
     }
 
     /**
-     * RestTemplate para consumir APIs externas (Steam, ByMykel/CSGO-API, etc.).
+     * RestTemplate para consumir APIs externas (Steam, ByMykel/CSGO-API).
      *
-     * Mejoras críticas:
-     *   1. TIMEOUT EXPLÍCITO: 30s connect + 60s read.
-     *   2. USER-AGENT DE NAVEGADOR: Steam discrimina por UA.
-     *   3. ACCEPT-ENCODING: identity → IMPORTANTE — le decimos a Steam que NO
-     *      comprima la respuesta. Sin esto, Steam manda gzip cuando ve que el
-     *      User-Agent parece un browser, y el RestTemplate (sin SDK extra)
-     *      no descomprime gzip → quedás con bytes binarios en el cuerpo.
-     *      El header "identity" significa "mandame el cuerpo sin compresión".
+     * IMPORTANTE — Decisión sobre el User-Agent:
+     * Steam tiene un anti-scraper: cuando recibe un request con User-Agent
+     * de browser (Mozilla, Firefox, Chrome) PERO sin las cookies de sesión
+     * que un browser real tendría, lo detecta como scraper y devuelve 400
+     * Bad Request.
+     *
+     * En cambio, User-Agents simples de clientes HTTP (curl, wget, Java)
+     * pasan sin problema, porque Steam asume que son herramientas legítimas.
+     *
+     * Por eso usamos "curl/8.18.0" — el mismo User-Agent que devuelve HTTP 200
+     * cuando hacés:
+     *   curl "https://steamcommunity.com/inventory/{steamId}/730/2?l=english"
+     *
+     * Probado y verificado: con User-Agent de Firefox → 400, con curl → 200.
      */
     @Bean
     public RestTemplate restTemplate() {
@@ -79,28 +85,22 @@ public class ApplicationConfig {
         factory.setReadTimeout((int) Duration.ofSeconds(60).toMillis());
 
         RestTemplate restTemplate = new RestTemplate(factory);
-        restTemplate.getInterceptors().add(new BrowserUserAgentInterceptor());
+        restTemplate.getInterceptors().add(new SimpleUserAgentInterceptor());
         return restTemplate;
     }
 
     /**
-     * Interceptor que agrega headers de navegador a cada request del RestTemplate.
-     * IMPORTANTE: usamos Accept-Encoding: identity para que Steam NO nos mande
-     * la respuesta comprimida con gzip (el RestTemplate por default no descomprime).
+     * Interceptor que mantiene los headers MÍNIMOS, igual que un curl puro.
+     * Cualquier header extra que parezca de browser dispara el anti-scraper
+     * de Steam. Mantener simple es fundamental.
      */
-    private static class BrowserUserAgentInterceptor implements ClientHttpRequestInterceptor {
+    private static class SimpleUserAgentInterceptor implements ClientHttpRequestInterceptor {
         @Override
         public ClientHttpResponse intercept(HttpRequest request, byte[] body,
                                             ClientHttpRequestExecution execution)
                 throws IOException {
-            request.getHeaders().set("User-Agent",
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) " +
-                    "Gecko/20100101 Firefox/131.0");
-            request.getHeaders().set("Accept",
-                    "application/json, text/plain, */*");
-            request.getHeaders().set("Accept-Language", "en-US,en;q=0.9");
-            // CRÍTICO: identity = sin compresión
-            request.getHeaders().set("Accept-Encoding", "identity");
+            request.getHeaders().set("User-Agent", "curl/8.18.0");
+            request.getHeaders().set("Accept", "*/*");
             return execution.execute(request, body);
         }
     }

@@ -1,7 +1,7 @@
 package skinsmarket.demo.service;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.transaction.Transactional;
 import lombok.Data;
@@ -12,21 +12,27 @@ import skinsmarket.demo.controller.skincatalogo.SkinCatalogoRequest;
 import skinsmarket.demo.entity.SkinCatalogo;
 import skinsmarket.demo.repository.SkinCatalogoRepository;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
+/**
+ * Implementación del servicio de catálogo maestro de skins.
+ *
+ * Cliente de la API pública de ByMykel/CSGO-API:
+ *   https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/skins.json
+ *
+ * Sin API key. La API tiene ~22.000 skins de CS2 con metadata completa
+ * (nombre, descripción, imagen, rareza, exterior soportado, etc.).
+ *
+ * IMPORTANTE: usamos raw.githubusercontent.com (no bymykel.github.io) porque
+ * GitHub Pages sirve el JSON con Content-Type incorrecto (text/html), lo que
+ * rompe la deserialización automática de Spring.
+ */
 @Service
 public class SkinCatalogoServiceImpl implements SkinCatalogoService {
 
-    /**
-     * URL del endpoint de skins de la API pública de ByMykel/CSGO-API.
-     *
-     * Ojo: hay que usar raw.githubusercontent.com (que sirve el archivo crudo).
-     * La URL bymykel.github.io es la landing page del proyecto y devuelve HTML.
-     *
-     * No requiere API key — es JSON estático servido desde el repo de GitHub.
-     * Documentación: https://github.com/ByMykel/CSGO-API
-     */
-    private static final String STEAM_SKINS_URL =
+    private static final String API_URL =
             "https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/skins.json";
 
     @Autowired
@@ -35,108 +41,110 @@ public class SkinCatalogoServiceImpl implements SkinCatalogoService {
     @Autowired
     private RestTemplate restTemplate;
 
-    // =========================================================================
-    // Sincronización con la API externa
-    // =========================================================================
-
     @Override
     @Transactional
-    public int sincronizarDesdeApi(Integer limit) {
-        // 1. Traemos la respuesta como String crudo.
-        //    Hacemos esto en lugar de pedir directamente List<ApiSkinDto> porque
-        //    GitHub sirve el JSON con Content-Type "text/plain", lo que hace
-        //    que el RestTemplate no encuentre un MessageConverter de Jackson
-        //    automáticamente. Pidiendo String se usa StringHttpMessageConverter
-        //    que acepta cualquier text/*, y después parseamos manualmente.
-        String json = restTemplate.getForObject(STEAM_SKINS_URL, String.class);
+    public int sincronizarDesdeApi(int limit) {
+        // 1. Pedimos como String porque GitHub Raw devuelve text/plain
+        String json;
+        try {
+            json = restTemplate.getForObject(API_URL, String.class);
+        } catch (Exception e) {
+            throw new RuntimeException(
+                    "Error al consultar la API de ByMykel: " + e.getMessage());
+        }
 
         if (json == null || json.isBlank()) {
-            throw new RuntimeException("La API de skins no devolvió datos");
+            throw new RuntimeException("La API de ByMykel devolvió respuesta vacía");
         }
 
-        // 2. Deserializamos el JSON con un ObjectMapper local
+        // 2. Parseamos manualmente con ObjectMapper
         ObjectMapper mapper = new ObjectMapper();
-        // Por si la API agrega campos nuevos en el futuro, evitamos que el
-        // deserializer falle por propiedades desconocidas.
-        mapper.configure(
-                com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,
-                false);
+        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-        List<ApiSkinDto> skinsDeLaApi;
+        List<ByMykelSkin> skins;
         try {
-            skinsDeLaApi = mapper.readValue(json, new TypeReference<List<ApiSkinDto>>() {});
+            skins = mapper.readValue(json,
+                    mapper.getTypeFactory().constructCollectionType(List.class, ByMykelSkin.class));
         } catch (Exception e) {
-            throw new RuntimeException("Error al parsear JSON de la API: " + e.getMessage());
+            throw new RuntimeException(
+                    "Error al parsear respuesta de ByMykel: " + e.getMessage());
         }
 
-        if (skinsDeLaApi == null || skinsDeLaApi.isEmpty()) {
-            throw new RuntimeException("La API de skins no devolvió datos");
-        }
+        // 3. Determinar cuántas procesar (limit ≤ 0 → todas)
+        boolean sinLimite = limit <= 0;
+        int total = sinLimite ? skins.size() : Math.min(limit, skins.size());
 
-        // 3. Aplicamos el límite si fue provisto (default: todas las que vienen)
-        int max = (limit != null && limit > 0)
-                ? Math.min(limit, skinsDeLaApi.size())
-                : skinsDeLaApi.size();
+        System.out.println("[SkinCatalogoService] Sincronizando " + total +
+                " skins (de " + skins.size() + " disponibles en la API)...");
 
-        // 4. Recorremos y persistimos solo las que no existen en la BD
+        // 4. Upsert por externalId
         int insertadas = 0;
-        for (int i = 0; i < max; i++) {
-            ApiSkinDto dto = skinsDeLaApi.get(i);
+        int actualizadas = 0;
+        int errores = 0;
 
-            // Si ya existe esta skin (matcheada por externalId), la salteamos
-            if (dto.getId() == null ||
-                    skinCatalogoRepository.findByExternalId(dto.getId()).isPresent()) {
-                continue;
+        for (int i = 0; i < total; i++) {
+            ByMykelSkin s = skins.get(i);
+            try {
+                if (s.getId() == null || s.getName() == null) {
+                    errores++;
+                    continue;
+                }
+
+                Optional<SkinCatalogo> existente =
+                        skinCatalogoRepository.findByExternalId(s.getId());
+
+                SkinCatalogo cat;
+                boolean esNueva = false;
+                if (existente.isPresent()) {
+                    cat = existente.get();
+                } else {
+                    cat = new SkinCatalogo();
+                    cat.setExternalId(s.getId());
+                    esNueva = true;
+                }
+
+                cat.setName(s.getName());
+                cat.setDescription(s.getDescription());
+                cat.setImageUrl(s.getImage());
+                cat.setMinFloat(s.getMin_float());
+                cat.setMaxFloat(s.getMax_float());
+                cat.setSupportsStattrak(Boolean.TRUE.equals(s.getStattrak()));
+                cat.setSupportsSouvenir(Boolean.TRUE.equals(s.getSouvenir()));
+
+                if (s.getWeapon() != null && s.getWeapon().getName() != null) {
+                    cat.setWeaponName(s.getWeapon().getName());
+                }
+                if (s.getCategory() != null && s.getCategory().getName() != null) {
+                    cat.setCategoryName(s.getCategory().getName());
+                }
+                if (s.getRarity() != null) {
+                    cat.setRarezaName(s.getRarity().getName());
+                    cat.setRarezaColor(s.getRarity().getColor());
+                }
+
+                skinCatalogoRepository.save(cat);
+                if (esNueva) insertadas++;
+                else actualizadas++;
+
+                if ((i + 1) % 1000 == 0) {
+                    System.out.println("[SkinCatalogoService] Procesadas " +
+                            (i + 1) + "/" + total + "...");
+                }
+            } catch (Exception e) {
+                errores++;
             }
-
-            SkinCatalogo entidad = SkinCatalogo.builder()
-                    .externalId(dto.getId())
-                    .name(dto.getName())
-                    .description(dto.getDescription())
-                    .weaponName(dto.getWeapon() != null ? dto.getWeapon().getName() : null)
-                    .categoryName(dto.getCategory() != null ? dto.getCategory().getName() : null)
-                    .rarezaName(dto.getRarity() != null ? dto.getRarity().getName() : null)
-                    .rarezaColor(dto.getRarity() != null ? dto.getRarity().getColor() : null)
-                    .imageUrl(dto.getImage())
-                    .minFloat(dto.getMin_float())
-                    .maxFloat(dto.getMax_float())
-                    .supportsStattrak(Boolean.TRUE.equals(dto.getStattrak()))
-                    .supportsSouvenir(Boolean.TRUE.equals(dto.getSouvenir()))
-                    .build();
-
-            skinCatalogoRepository.save(entidad);
-            insertadas++;
         }
+
+        System.out.println("[SkinCatalogoService] ✓ Sync terminado. " +
+                "Insertadas: " + insertadas +
+                " | Actualizadas: " + actualizadas +
+                " | Errores: " + errores);
 
         return insertadas;
     }
 
-    // =========================================================================
-    // CRUD manual del catálogo
-    // =========================================================================
-
     @Override
-    @Transactional
-    public SkinCatalogo crear(SkinCatalogoRequest request) {
-        SkinCatalogo entidad = SkinCatalogo.builder()
-                .externalId(request.getExternalId())
-                .name(request.getName())
-                .description(request.getDescription())
-                .weaponName(request.getWeaponName())
-                .categoryName(request.getCategoryName())
-                .rarezaName(request.getRarezaName())
-                .rarezaColor(request.getRarezaColor())
-                .imageUrl(request.getImageUrl())
-                .minFloat(request.getMinFloat())
-                .maxFloat(request.getMaxFloat())
-                .supportsStattrak(Boolean.TRUE.equals(request.getSupportsStattrak()))
-                .supportsSouvenir(Boolean.TRUE.equals(request.getSupportsSouvenir()))
-                .build();
-        return skinCatalogoRepository.save(entidad);
-    }
-
-    @Override
-    public List<SkinCatalogo> listar() {
+    public List<SkinCatalogo> listarTodos() {
         return skinCatalogoRepository.findAll();
     }
 
@@ -144,7 +152,7 @@ public class SkinCatalogoServiceImpl implements SkinCatalogoService {
     public SkinCatalogo obtenerPorId(Long id) {
         return skinCatalogoRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Catálogo no encontrado con id: " + id));
+                        "Item del catálogo no encontrado: " + id));
     }
 
     @Override
@@ -153,37 +161,67 @@ public class SkinCatalogoServiceImpl implements SkinCatalogoService {
     }
 
     @Override
-    public List<SkinCatalogo> filtrarPorArma(String weapon) {
-        return skinCatalogoRepository.findByWeaponNameIgnoreCase(weapon);
-    }
+    public List<SkinCatalogo> filtrar(String arma, String categoria) {
+        boolean conArma = arma != null && !arma.isBlank();
+        boolean conCategoria = categoria != null && !categoria.isBlank();
 
-    @Override
-    public List<SkinCatalogo> filtrarPorCategoria(String categoria) {
-        return skinCatalogoRepository.findByCategoryNameIgnoreCase(categoria);
+        if (conArma && conCategoria) {
+            return skinCatalogoRepository
+                    .findByWeaponNameContainingIgnoreCaseAndCategoryNameContainingIgnoreCase(
+                            arma, categoria);
+        }
+        if (conArma) {
+            return skinCatalogoRepository.findByWeaponNameContainingIgnoreCase(arma);
+        }
+        if (conCategoria) {
+            return skinCatalogoRepository.findByCategoryNameContainingIgnoreCase(categoria);
+        }
+        return new ArrayList<>();
     }
 
     @Override
     @Transactional
-    public void eliminar(Long id) {
-        if (!skinCatalogoRepository.existsById(id)) {
-            throw new IllegalArgumentException("Catálogo no encontrado con id: " + id);
+    public SkinCatalogo crear(SkinCatalogoRequest req) {
+        if (req.getExternalId() == null || req.getName() == null) {
+            throw new RuntimeException("externalId y name son obligatorios");
         }
+        skinCatalogoRepository.findByExternalId(req.getExternalId()).ifPresent(c -> {
+            throw new RuntimeException(
+                    "Ya existe un item con externalId: " + req.getExternalId());
+        });
+
+        SkinCatalogo cat = new SkinCatalogo();
+        cat.setExternalId(req.getExternalId());
+        cat.setName(req.getName());
+        cat.setDescription(req.getDescription());
+        cat.setImageUrl(req.getImageUrl());
+        cat.setWeaponName(req.getWeaponName());
+        cat.setCategoryName(req.getCategoryName());
+        cat.setRarezaName(req.getRarezaName());
+        cat.setRarezaColor(req.getRarezaColor());
+        cat.setMinFloat(req.getMinFloat());
+        cat.setMaxFloat(req.getMaxFloat());
+        cat.setSupportsStattrak(Boolean.TRUE.equals(req.getSupportsStattrak()));
+        cat.setSupportsSouvenir(Boolean.TRUE.equals(req.getSupportsSouvenir()));
+
+        return skinCatalogoRepository.save(cat);
+    }
+
+    @Override
+    @Transactional
+    public boolean eliminar(Long id) {
+        if (!skinCatalogoRepository.existsById(id)) return false;
         skinCatalogoRepository.deleteById(id);
+        return true;
     }
 
     // =========================================================================
-    // DTOs internos para deserializar la respuesta de la API externa
-    // Solo se usan dentro de este service (no se exponen al cliente).
+    // DTOs internos para deserializar la respuesta de ByMykel
     // =========================================================================
 
-    /**
-     * Estructura mínima de la respuesta de la API.
-     * Solo mapeamos los campos que necesitamos. @JsonIgnoreProperties evita
-     * que el deserializer falle cuando vienen campos extra.
-     */
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class ApiSkinDto {
+    public static class ByMykelSkin {
         private String id;
         private String name;
         private String description;
@@ -192,21 +230,21 @@ public class SkinCatalogoServiceImpl implements SkinCatalogoService {
         private Double max_float;
         private Boolean stattrak;
         private Boolean souvenir;
-        private NamedRef weapon;
-        private NamedRef category;
-        private RarityRef rarity;
+        private ByMykelNamed weapon;
+        private ByMykelNamed category;
+        private ByMykelRarity rarity;
     }
 
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class NamedRef {
+    public static class ByMykelNamed {
         private String id;
         private String name;
     }
 
     @Data
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public static class RarityRef {
+    public static class ByMykelRarity {
         private String id;
         private String name;
         private String color;

@@ -3,28 +3,26 @@ package skinsmarket.demo.controller.skincatalogo;
 import lombok.Data;
 
 /**
- * DTO para creación manual de un item del catálogo de skins.
+ * DTO para crear items del catálogo manualmente (solo ADMIN).
  *
- * Este endpoint es para casos especiales donde el ADMIN quiere registrar
- * una skin que no está en la API pública (por ejemplo, una skin custom).
- * El flujo normal es usar POST /catalogo/sincronizar para importar desde la API.
+ * En el flujo normal el catálogo se importa automáticamente desde
+ * la API de ByMykel (CommandLineRunner CatalogoSeeder). Este DTO se usa
+ * solo cuando el ADMIN quiere agregar una skin a mano que no está en la
+ * API pública (caso muy raro).
  */
 @Data
 public class SkinCatalogoRequest {
 
-    /**
-     * ID externo. Si se crea manualmente, podés usar cualquier identificador único
-     * (ej: "custom-001"). Si lo dejás null, la BD asigna solo el id interno.
-     */
+    /** ID externo (ej: el de ByMykel). Si lo creás manual, podés usar prefijo "manual_". */
     private String externalId;
 
     private String name;
     private String description;
+    private String imageUrl;
     private String weaponName;
     private String categoryName;
     private String rarezaName;
     private String rarezaColor;
-    private String imageUrl;
     private Double minFloat;
     private Double maxFloat;
     private Boolean supportsStattrak;
