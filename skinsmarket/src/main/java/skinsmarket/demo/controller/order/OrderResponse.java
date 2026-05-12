@@ -30,6 +30,12 @@ public class OrderResponse {
     // Precio final después de aplicar el descuento del cupón
     private Double totalFinal;
 
+    private String paymentStatus;
+
+    private String mercadopagoPreferenceId;
+
+    private Long mercadopagoPaymentId;
+
     // Lista detallada de las skins compradas en esta orden
     private List<OrderDetailResponse> orderDetailResponses;
 }

@@ -204,6 +204,53 @@ UPDATE users SET role = 'ADMIN' WHERE email = 'juan@mail.com';
 
 ---
 
+### 💳 Pagos Mercado Pago Bricks — token USER
+
+Variables necesarias para levantar el backend:
+
+```bash
+export MERCADOPAGO_ACCESS_TOKEN="TEST-..."
+export MERCADOPAGO_PUBLIC_KEY="TEST-..."
+export MERCADOPAGO_BACKEND_URL="https://tu-url-publica"
+```
+
+En desarrollo local, `MERCADOPAGO_BACKEND_URL` debe ser una URL pública tipo ngrok para que Mercado Pago pueda llamar al webhook.
+
+| Método | URL | Descripción |
+|---|---|---|
+| POST | `/payments/bricks/preferences/from-carrito` | Crea una orden desde el carrito y devuelve `preferenceId` para Payment Brick |
+| POST | `/payments/bricks/preferences/orders/{orderId}` | Devuelve `preferenceId` para una orden existente |
+| POST | `/payments/bricks/orders/{orderId}/process-payment` | Recibe el `formData` del Payment Brick y crea el pago |
+| POST | `/payments/webhook` | Webhook público de Mercado Pago |
+
+El frontend futuro debe enviar en `/process-payment` el `formData` recibido en `onSubmit` del Payment Brick. El backend no confía en el monto enviado por frontend: usa el total de la orden guardada.
+
+Ejemplo de body para tarjeta:
+
+```json
+{
+  "token": "CARD_TOKEN_GENERADO_POR_BRICK",
+  "payment_method_id": "visa",
+  "issuer_id": "310",
+  "installments": 1,
+  "payer": {
+    "email": "comprador@test.com",
+    "identification": {
+      "type": "DNI",
+      "number": "12345678"
+    }
+  }
+}
+```
+
+Agregar siempre un header de idempotencia desde el frontend:
+
+```http
+X-Idempotency-Key: 550e8400-e29b-41d4-a716-446655440000
+```
+
+---
+
 ### 🛡️ Panel Admin — token ADMIN
 
 | Método | URL | Descripción |

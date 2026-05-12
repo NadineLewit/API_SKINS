@@ -58,6 +58,8 @@ public class SecurityConfig {
                 .requestMatchers("/uploads/**").permitAll()
                 .requestMatchers("/historial/**").permitAll()
                 .requestMatchers("/ranking/**").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.GET, "/payments/return/**").permitAll()
+                .requestMatchers(org.springframework.http.HttpMethod.POST, "/payments/webhook").permitAll()
 
                 // ── Catálogo: GET público, escritura solo ADMIN ─────────────────
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/catalogo").permitAll()

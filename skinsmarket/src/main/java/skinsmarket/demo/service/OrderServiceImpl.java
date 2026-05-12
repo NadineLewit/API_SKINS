@@ -168,6 +168,9 @@ public class OrderServiceImpl implements OrderService {
         response.setTotalPrice(totalPrice);
         response.setDescuentoAplicado(descuentoAplicado);
         response.setTotalFinal(totalFinal);
+        response.setPaymentStatus(order.getPaymentStatus());
+        response.setMercadopagoPreferenceId(order.getMercadopagoPreferenceId());
+        response.setMercadopagoPaymentId(order.getMercadopagoPaymentId());
         response.setOrderDetailResponses(detailResponses);
         return response;
     }
@@ -201,6 +204,9 @@ public class OrderServiceImpl implements OrderService {
         resp.setTotalPrice(order.getTotalPrice());
         resp.setDescuentoAplicado(order.getDescuentoAplicado());
         resp.setTotalFinal(order.getTotalFinal());
+        resp.setPaymentStatus(order.getPaymentStatus());
+        resp.setMercadopagoPreferenceId(order.getMercadopagoPreferenceId());
+        resp.setMercadopagoPaymentId(order.getMercadopagoPaymentId());
 
         List<OrderDetailResponse> details = new ArrayList<>();
         for (OrderDetail od : order.getOrderDetails()) {

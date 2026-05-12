@@ -1009,6 +1009,292 @@ collection:
             send: true
             store: true
           rebuildPath: true
+  - name: 💳 Pagos Mercado Pago Bricks
+    meta:
+      id: fld_payments_001
+      created: 1778200000000
+      modified: 1778200000000
+      sortKey: -1778200000075
+      description: "Checkout Bricks / Payment Brick. Requiere MERCADOPAGO_ACCESS_TOKEN y MERCADOPAGO_PUBLIC_KEY en el backend."
+    children:
+      - url: "{{ base_url }}/payments/bricks/preferences/from-carrito"
+        name: "[USER] Bricks - Crear preferencia desde carrito"
+        meta:
+          id: req_pay_bricks_pref_from_cart
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 Crea la orden desde el carrito y devuelve preferenceId/publicKey para inicializar Payment Brick."
+          sortKey: -17782000000751
+        method: POST
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_user }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/payments/bricks/preferences/from-carrito?codigoCupon=PROMO10"
+        name: "[USER] Bricks - Crear preferencia desde carrito con cupón"
+        meta:
+          id: req_pay_bricks_pref_from_cart_coupon
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 Igual que la anterior, aplicando cupón."
+          sortKey: -17782000000752
+        method: POST
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_user }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/payments/bricks/preferences/orders/{{ order_id }}"
+        name: "[USER] Bricks - Crear preferencia para orden existente"
+        meta:
+          id: req_pay_bricks_pref_order
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 Usar una orden propia existente. Setear order_id en environment."
+          sortKey: -17782000000753
+        method: POST
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_user }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/payments/bricks/orders/{{ order_id }}/process-payment"
+        name: "[USER] Bricks - Procesar pago con tarjeta"
+        meta:
+          id: req_pay_bricks_process_card
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 Simula lo que enviará Payment Brick en onSubmit. token lo genera el frontend, no Insomnia."
+          sortKey: -17782000000754
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "token": "{{ mp_card_token }}",
+              "payment_method_id": "visa",
+              "issuer_id": "{{ mp_issuer_id }}",
+              "installments": 1,
+              "payer": {
+                "email": "test_user_123@testuser.com",
+                "identification": {
+                  "type": "DNI",
+                  "number": "12345678"
+                }
+              }
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ token_user }}
+          - name: X-Idempotency-Key
+            value: "{{ idempotency_key }}"
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/payments/bricks/orders/{{ order_id }}/process-payment"
+        name: "[USER] Bricks - Procesar pago Rapipago"
+        meta:
+          id: req_pay_bricks_process_rapipago
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 Para medios offline, Mercado Pago devuelve externalResourceUrl con instrucciones/ticket."
+          sortKey: -17782000000755
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "payment_method_id": "rapipago",
+              "payer": {
+                "email": "test_user_123@testuser.com"
+              }
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ token_user }}
+          - name: X-Idempotency-Key
+            value: "{{ idempotency_key }}"
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/payments/bricks/orders/{{ order_id }}/process-payment"
+        name: "[USER] Bricks - Procesar pago Pago Fácil"
+        meta:
+          id: req_pay_bricks_process_pagofacil
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔵 Medio offline. El status suele quedar pendiente hasta que se pague."
+          sortKey: -17782000000756
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "payment_method_id": "pagofacil",
+              "payer": {
+                "email": "test_user_123@testuser.com"
+              }
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+          - name: Authorization
+            value: Bearer {{ token_user }}
+          - name: X-Idempotency-Key
+            value: "{{ idempotency_key }}"
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/payments/webhook?type=payment&id={{ payment_id }}"
+        name: "[SIN TOKEN] Webhook Mercado Pago - Simular notificación"
+        meta:
+          id: req_pay_webhook_query
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 Consulta Mercado Pago por payment_id y actualiza la orden por external_reference."
+          sortKey: -17782000000757
+        method: POST
+        headers:
+          - name: Content-Type
+            value: application/json
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/payments/webhook"
+        name: "[SIN TOKEN] Webhook Mercado Pago - Body realista"
+        meta:
+          id: req_pay_webhook_body
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 Variante con body tipo webhook. Setear payment_id en environment."
+          sortKey: -17782000000758
+        method: POST
+        body:
+          mimeType: application/json
+          text: |-
+            {
+              "action": "payment.updated",
+              "type": "payment",
+              "data": {
+                "id": "{{ payment_id }}"
+              }
+            }
+        headers:
+          - name: Content-Type
+            value: application/json
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/payments/return/success"
+        name: "[SIN TOKEN] Retorno success"
+        meta:
+          id: req_pay_return_success
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 URL de retorno configurada en la preferencia."
+          sortKey: -17782000000759
+        method: GET
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/payments/return/failure"
+        name: "[SIN TOKEN] Retorno failure"
+        meta:
+          id: req_pay_return_failure
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 URL de retorno configurada en la preferencia."
+          sortKey: -17782000000760
+        method: GET
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/payments/return/pending"
+        name: "[SIN TOKEN] Retorno pending"
+        meta:
+          id: req_pay_return_pending
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 URL de retorno configurada en la preferencia."
+          sortKey: -17782000000761
+        method: GET
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
   - name: 🏷️ Cupones
     meta:
       id: fld_cupon_001
@@ -1303,3 +1589,8 @@ environments:
     token_user: ""
     token_amigo: ""
     catalogo_id: "1"
+    order_id: "1"
+    payment_id: ""
+    idempotency_key: "550e8400-e29b-41d4-a716-446655440000"
+    mp_card_token: "CARD_TOKEN_GENERADO_POR_PAYMENT_BRICK"
+    mp_issuer_id: "310"

@@ -55,6 +55,13 @@ public class Order {
     @Column(nullable = false)
     private Double totalFinal = 0.0;
 
+    @Column(nullable = false)
+    private String paymentStatus = "PENDING_PAYMENT";
+
+    private String mercadopagoPreferenceId;
+
+    private Long mercadopagoPaymentId;
+
     // Lista de detalles de la orden (cada ítem skin + cantidad + precio unitario)
     // CascadeType.ALL: al persistir/eliminar la orden, se persisten/eliminan sus detalles
     // orphanRemoval = true: si un detalle se quita de la lista, se elimina de la BD

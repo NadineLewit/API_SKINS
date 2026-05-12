@@ -59,8 +59,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         final String jwt;
         final String userEmail;
 
-        // Si no hay header o no empieza con "Bearer", dejamos pasar sin autenticar
-        if (authHeader == null || !authHeader.startsWith("Bearer")) {
+        // Si no hay header o no tiene "Bearer <token>", dejamos pasar sin autenticar
+        if (authHeader == null || !authHeader.startsWith("Bearer ") || authHeader.length() <= 7) {
             filterChain.doFilter(request, response);
             return;
         }
