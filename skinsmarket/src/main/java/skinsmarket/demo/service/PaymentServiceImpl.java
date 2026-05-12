@@ -24,17 +24,30 @@ import skinsmarket.demo.controller.payment.BrickPaymentRequest;
 import skinsmarket.demo.controller.payment.BrickPaymentResponse;
 import skinsmarket.demo.controller.payment.BrickPreferenceResponse;
 import skinsmarket.demo.controller.payment.MercadoPagoWebhookRequest;
+import skinsmarket.demo.entity.OperationType;
 import skinsmarket.demo.entity.Order;
 import skinsmarket.demo.entity.OrderDetail;
 import skinsmarket.demo.repository.OrderRepository;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * PaymentServiceImpl con integración al archivo orders.json del bot.
+ *
+ * CAMBIO sobre la versión anterior:
+ *   - Cuando una orden pasa a paymentStatus=PAID, ADEMÁS de actualizar la BD,
+ *     se escribe una entrada en orders.json para que el bot prepare la entrega
+ *     de las skins compradas. El MockTradeScheduler también detecta el PAID y
+ *     avanza el tradeStatus a PREPARING_TRADE → BOT_SENT → COMPLETED.
+ *
+ * El resto de la lógica MP (preferencias, brick, webhook) sigue igual.
+ */
 @Service
 public class PaymentServiceImpl implements PaymentService {
 
@@ -43,6 +56,10 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Autowired
     private OrderRepository orderRepository;
+
+    /** ✨ NUEVO: para escribir entradas en orders.json al confirmar pago. */
+    @Autowired
+    private BotTradeOrdersFileService botFileService;
 
     @Value("${mercadopago.access-token}")
     private String accessToken;
@@ -207,6 +224,46 @@ public class PaymentServiceImpl implements PaymentService {
         }
     }
 
+    /**
+     * ✨ NUEVO: cuando el payment se actualiza, si pasa a PAID y es una compra,
+     * escribimos una entrada en orders.json para que el bot prepare el envío
+     * (o el MockTradeScheduler lo procese automáticamente).
+     */
+    private void updateOrderWithPayment(Order order, Payment payment) {
+        order.setMercadopagoPaymentId(payment.getId());
+        String newStatus = mapPaymentStatus(payment.getStatus());
+        order.setPaymentStatus(newStatus);
+        orderRepository.save(order);
+
+        // Si la compra fue pagada con éxito y es PURCHASE, crear entrada en orders.json
+        if ("PAID".equals(newStatus) && order.getOperationType() == OperationType.PURCHASE) {
+            crearBotOrderParaCompra(order);
+        }
+    }
+
+    private void crearBotOrderParaCompra(Order order) {
+        List<String> assetIds = new ArrayList<>();
+        // En PURCHASE, los assetIds reales son del bot.
+        // Por ahora dejamos vacío — el bot real elegirá qué assetId mandar.
+        // Lo que importa son los Skin.id que el bot tiene que entregar.
+        for (OrderDetail d : order.getOrderDetails()) {
+            if (d.getSkin() != null) {
+                assetIds.add("SKIN-" + d.getSkin().getId());
+            }
+        }
+
+        BotTradeOrdersFileService.BotOrder bo = new BotTradeOrdersFileService.BotOrder();
+        bo.orderId = order.getId();
+        bo.operationType = OperationType.PURCHASE.name();
+        bo.status = "PAID_READY_TO_SEND";
+        bo.direction = "BOT_TO_USER";
+        bo.partnerSteamId64 = order.getUser().getSteamId64();
+        bo.partnerTradeUrl = order.getUser().getTradeUrl();
+        bo.assetIds = assetIds;
+        bo.mockMode = "true";
+        botFileService.upsert(bo);
+    }
+
     private void ensureConfigured() {
         if (accessToken == null || accessToken.isBlank()) {
             throw new RuntimeException("Falta configurar MERCADOPAGO_ACCESS_TOKEN");
@@ -263,12 +320,6 @@ public class PaymentServiceImpl implements PaymentService {
         return MPRequestOptions.builder()
                 .customHeaders(customHeaders)
                 .build();
-    }
-
-    private void updateOrderWithPayment(Order order, Payment payment) {
-        order.setMercadopagoPaymentId(payment.getId());
-        order.setPaymentStatus(mapPaymentStatus(payment.getStatus()));
-        orderRepository.save(order);
     }
 
     private boolean isPublicHttpsBackendUrl() {

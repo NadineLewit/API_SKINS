@@ -9,49 +9,46 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Entidad que representa una Orden de compra de skins.
+ * Entidad que representa una operación de la plataforma:
+ *   - Compra (PURCHASE) — flujo original con Mercado Pago
+ *   - Venta (SALE) — usuario deposita skins al bot
+ *   - Intercambio (EXCHANGE) — mezcla skins propias y del marketplace
+ *   - Devolución (RETURN) — el bot devuelve skins al usuario
  *
- * Relaciones:
- *   - Muchas órdenes pertenecen a un usuario (ManyToOne → User)
- *   - Una orden tiene muchos detalles de compra (OneToMany → OrderDetail)
+ * CAMPOS NUEVOS (sobre la versión original que solo soportaba PURCHASE):
+ *   - operationType: distingue compra/venta/intercambio/devolución
+ *   - tradeStatus: estado de la oferta con el bot de Steam
+ *   - botTradeOfferId: id del trade offer real (cuando el bot esté activo)
+ *   - expectedAssetIds: assetIds que el bot espera (para validar la oferta entrante)
+ *   - userSkinAssetIds: assetIds que el USER ya entregó (para devolución)
+ *   - priceDifference: en intercambios, monto que falta pagar/devolver
+ *   - relatedOrderId: vincula una devolución con su orden original
  *
- * Se usa @Table(name="orders") para evitar conflicto con la palabra reservada
- * ORDER en SQL
+ * Mantengo @Table(name="orders") para no romper la BD existente.
  */
 @Entity
 @Data
 @Table(name = "orders")
 public class Order {
 
-    // Identificador único generado automáticamente
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // Usuario que realizó la compra
-    // FK: user_id referencia a la tabla users
     @ManyToOne
     @JoinColumn(name = "user_id")
     @JsonIgnore
     private User user;
 
-    // Fecha y hora en que se creó la orden
     @Column(nullable = false)
     private LocalDateTime date;
 
-    // Precio total original de la orden (sin descuentos)
-    // Suma de (precio unitario × cantidad) de todos los detalles
     @Column(nullable = false)
     private Double totalPrice;
 
-    // Porcentaje de descuento aplicado por cupón (0.0 si no se usó ninguno)
-    // Ej: 0.15 equivale a un 15% de descuento
     @Column(nullable = false)
     private Double descuentoAplicado = 0.0;
 
-    // Precio final tras aplicar el descuento del cupón
-    // totalFinal = totalPrice * (1 - descuentoAplicado)
-    // Default 0.0 para evitar NPE al leer órdenes existentes sin este campo
     @Column(nullable = false)
     private Double totalFinal = 0.0;
 
@@ -59,41 +56,88 @@ public class Order {
     private String paymentStatus = "PENDING_PAYMENT";
 
     private String mercadopagoPreferenceId;
-
     private Long mercadopagoPaymentId;
 
-    // Lista de detalles de la orden (cada ítem skin + cantidad + precio unitario)
-    // CascadeType.ALL: al persistir/eliminar la orden, se persisten/eliminan sus detalles
-    // orphanRemoval = true: si un detalle se quita de la lista, se elimina de la BD
-    @OneToMany(
-            mappedBy = "order",
-            cascade = CascadeType.ALL,
-            orphanRemoval = true
-    )
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderDetail> orderDetails = new ArrayList<>();
+
+    // =========================================================================
+    // CAMPOS NUEVOS PARA FLUJO BOT
+    // =========================================================================
+
+    /**
+     * Tipo de operación. Para órdenes pre-existentes (sin este campo en BD),
+     * default a PURCHASE para no romper retrocompatibilidad.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "operation_type", nullable = false, length = 20)
+    private OperationType operationType = OperationType.PURCHASE;
+
+    /**
+     * Estado actual del trade con el bot.
+     * Default: WAITING_PAYMENT (corresponde al flujo de compra clásica).
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "trade_status", length = 30)
+    private TradeStatus tradeStatus = TradeStatus.WAITING_PAYMENT;
+
+    /**
+     * ID del trade offer real en Steam.
+     * Mientras el bot esté en modo mock, lo dejamos null o con prefijo "MOCK-".
+     * Cuando el bot real esté activo (después del 10/06), guardará el offer ID real.
+     */
+    @Column(name = "bot_trade_offer_id", length = 100)
+    private String botTradeOfferId;
+
+    /**
+     * AssetIDs que el bot espera recibir/enviar en este trade.
+     * Formato JSON serializado, ej: "[\"12345\",\"67890\"]".
+     *
+     * En PURCHASE: assetIds que el bot va a ENVIAR al usuario.
+     * En SALE: assetIds que el bot espera RECIBIR del usuario.
+     * En EXCHANGE: ambos lados (ver expectedAssetIds + userSkinAssetIds).
+     * En RETURN: assetIds que el bot va a DEVOLVER al usuario.
+     */
+    @Column(name = "expected_asset_ids", length = 2000)
+    private String expectedAssetIds;
+
+    /**
+     * En SALE y EXCHANGE: assetIds que el USER se comprometió a enviar.
+     * Cuando el bot recibe el trade y los assetIds coinciden, marca
+     * USER_TRADE_RECEIVED. Si no coinciden, rechaza.
+     *
+     * Si después se cancela, estos son los assetIds a devolver.
+     */
+    @Column(name = "user_skin_asset_ids", length = 2000)
+    private String userSkinAssetIds;
+
+    /**
+     * Diferencia de precio en un intercambio.
+     *   > 0  el USER debe pagar (genera preferencia MP por este monto)
+     *   < 0  la plataforma debe acreditar saldo al USER
+     *   = 0  intercambio directo, no hay diferencia
+     */
+    @Column(name = "price_difference")
+    private Double priceDifference;
+
+    /**
+     * Cuando esta order es una RETURN, apunta al ID de la orden original
+     * que se canceló. Permite trackear "esta devolución corresponde a la venta #123".
+     */
+    @Column(name = "related_order_id")
+    private Long relatedOrderId;
 
     // -------------------------------------------------------------------------
     // Métodos auxiliares de gestión de detalles
     // -------------------------------------------------------------------------
 
-    /**
-     * Agrega un detalle a la orden y establece la referencia bidireccional.
-     * Mantiene sincronizados ambos lados de la relación OneToMany.
-     *
-     * @param d detalle de orden a agregar
-     */
     public void addOrderDetail(OrderDetail d) {
         orderDetails.add(d);
-        d.setOrder(this); // Mantener la FK en el detalle apuntando a esta orden
+        d.setOrder(this);
     }
 
-    /**
-     * Quita un detalle de la orden y limpia la referencia bidireccional.
-     *
-     * @param d detalle de orden a quitar
-     */
     public void removeOrderDetail(OrderDetail d) {
         orderDetails.remove(d);
-        d.setOrder(null); // Limpiar la FK para que JPA haga orphanRemoval
+        d.setOrder(null);
     }
 }

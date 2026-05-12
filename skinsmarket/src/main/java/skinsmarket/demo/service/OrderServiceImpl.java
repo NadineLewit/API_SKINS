@@ -21,6 +21,17 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * OrderServiceImpl — flujo de COMPRA clásico, integrado ahora con
+ * operationType=PURCHASE y tradeStatus=WAITING_PAYMENT.
+ *
+ * CAMBIOS sobre la versión anterior:
+ *   - Cada Order creada se marca como PURCHASE y WAITING_PAYMENT
+ *   - El MockTradeScheduler detecta órdenes PAID+WAITING_PAYMENT y avanza
+ *     automáticamente el trade hasta COMPLETED.
+ *
+ * Mantengo el resto del comportamiento original.
+ */
 @Service
 public class OrderServiceImpl implements OrderService {
 
@@ -30,7 +41,6 @@ public class OrderServiceImpl implements OrderService {
     @Autowired private CarritoRepository carritoRepository;
     @Autowired private UserRepository userRepository;
 
-    /** Servicio de eventos para registrar ventas (tracking). */
     @Autowired private EventoService eventoService;
 
     @Override
@@ -78,11 +88,12 @@ public class OrderServiceImpl implements OrderService {
         order.setUser(user);
         order.setDate(now);
 
+        // ✨ NUEVO: marcar como compra y esperando pago de MP
+        order.setOperationType(OperationType.PURCHASE);
+        order.setTradeStatus(TradeStatus.WAITING_PAYMENT);
+
         List<OrderDetailResponse> detailResponses = new ArrayList<>();
         double totalPrice = 0.0;
-
-        // Lista temporal para registrar eventos DESPUÉS de persistir la orden
-        // (necesitamos el id de la orden y de la skin para vincular bien)
         List<Object[]> ventasARegistrar = new ArrayList<>();
 
         for (OrderDetailRequest item : orderRequest.getItemList()) {
@@ -121,11 +132,9 @@ public class OrderServiceImpl implements OrderService {
 
             totalPrice += item.getQuantity() * finalPrice;
 
-            // Encolamos para registrar como evento después
             ventasARegistrar.add(new Object[]{skin, item.getQuantity(), finalPrice});
         }
 
-        // Cupón
         double descuentoAplicado = 0.0;
         if (orderRequest.getCodigoCupon() != null && !orderRequest.getCodigoCupon().isBlank()) {
             Cupon cupon = cuponRepository.findByCodigo(orderRequest.getCodigoCupon())
@@ -150,10 +159,6 @@ public class OrderServiceImpl implements OrderService {
         order.setTotalFinal(totalFinal);
         orderRepository.save(order);
 
-        // 📊 Registrar eventos SALE para el ranking de vendedores y skins más vendidas.
-        // Hacemos esto al final, después de que la orden está persistida.
-        // El EventoService es defensivo y no propaga excepciones, así que si
-        // falla acá no rompe la orden ya creada.
         for (Object[] venta : ventasARegistrar) {
             Skin skin = (Skin) venta[0];
             int cantidad = (int) venta[1];

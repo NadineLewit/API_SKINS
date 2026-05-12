@@ -1,6 +1,8 @@
 package skinsmarket.demo.repository;
 
 import skinsmarket.demo.entity.Order;
+import skinsmarket.demo.entity.OperationType;
+import skinsmarket.demo.entity.TradeStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -9,31 +11,44 @@ import java.util.List;
 /**
  * Repositorio JPA para la entidad Order.
  *
- * Gestiona la persistencia de las órdenes de compra de skins.
- *
- * Hereda de JpaRepository los métodos estándar:
- *   save(), findById(), findAll(), deleteById(), etc.
- * El método findAll() es el que usa el AdminService para listar todas las órdenes.
+ * Métodos nuevos para soportar venta/intercambio/devolución y el scheduler
+ * del mock del bot.
  */
 @Repository
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
-    /**
-     * Devuelve todas las órdenes de un usuario ordenadas por fecha descendente.
-     *
-     *   SELECT * FROM orders WHERE user_id = ? ORDER BY date DESC
-     *
-     * El ordenamiento DESC garantiza que el historial más reciente aparezca primero,
-     * lo cual es la experiencia esperada al consultar GET /order/me.
-     *
-     * @param userId ID del usuario dueño de las órdenes
-     * @return lista de órdenes del usuario, de más reciente a más antigua
-     */
+    /** Histórico de órdenes del usuario (más reciente primero). */
     List<Order> findByUserIdOrderByDateDesc(Long userId);
 
-    /**
-     * Verifica si existe una orden con ese ID que pertenezca al usuario dado.
-     * Se usa para validar que el usuario solo pueda eliminar sus propias órdenes.
-     */
+    /** Verifica si una orden pertenece a un usuario. */
     boolean existsByIdAndUserId(Long id, Long userId);
+
+    /**
+     * Devuelve todas las órdenes con un trade en alguno de los estados dados.
+     * Usado por el scheduler de mock para encontrar órdenes a procesar.
+     *
+     * Ejemplo: findByTradeStatusIn([PREPARING_TRADE, BOT_SENT])
+     */
+    List<Order> findByTradeStatusIn(List<TradeStatus> statuses);
+
+    /** Órdenes de un usuario filtradas por tipo de operación. */
+    List<Order> findByUserIdAndOperationTypeOrderByDateDesc(Long userId, OperationType type);
+
+    /** Órdenes de un usuario filtradas por estado del trade. */
+    List<Order> findByUserIdAndTradeStatusOrderByDateDesc(Long userId, TradeStatus status);
+
+    /**
+     * Busca órdenes que tengan un assetId específico en su userSkinAssetIds.
+     * Usado para evitar que la misma skin se use en dos operaciones simultáneas.
+     * Como guardamos los assetIds como JSON string, usamos LIKE.
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT o FROM Order o WHERE o.userSkinAssetIds LIKE %:assetId% " +
+            "AND o.tradeStatus NOT IN (skinsmarket.demo.entity.TradeStatus.COMPLETED, " +
+            "                          skinsmarket.demo.entity.TradeStatus.CANCELLED, " +
+            "                          skinsmarket.demo.entity.TradeStatus.RETURNED, " +
+            "                          skinsmarket.demo.entity.TradeStatus.RETURN_FAILED, " +
+            "                          skinsmarket.demo.entity.TradeStatus.FAILED, " +
+            "                          skinsmarket.demo.entity.TradeStatus.EXPIRED)")
+    List<Order> findActiveOrdersWithAssetId(@org.springframework.data.repository.query.Param("assetId") String assetId);
 }
