@@ -11,6 +11,9 @@ import lombok.Data;
 @Data
 public class UserResponse {
 
+    // Username público del usuario (distinto del email usado para login)
+    private String username;
+
     // Email del usuario (también sirve como identificador visible)
     private String email;
 

@@ -6,7 +6,6 @@ import java.util.function.Function;
 
 import javax.crypto.SecretKey;
 
-import skinsmarket.demo.entity.User;
 import org.springframework.stereotype.Service;
 
 import io.jsonwebtoken.Claims;
@@ -21,7 +20,7 @@ import org.springframework.security.core.userdetails.UserDetails;
  *
  * Responsabilidades:
  *   - Generar tokens JWT firmados con la clave secreta
- *   - Extraer claims (datos) de un token (username, rol, userId, etc.)
+ *   - Extraer claims (datos) de un token
  *   - Validar que un token sea auténtico y no haya expirado
  *
  * La clave secreta y el tiempo de expiración se leen desde application.properties.
@@ -42,10 +41,8 @@ public class JwtService {
     /**
      * Genera un token JWT para el usuario autenticado.
      *
-     * El token incluye como claims:
+     * El token incluye solo la información mínima necesaria:
      *   - subject: email del usuario
-     *   - role: rol del usuario (USER o ADMIN)
-     *   - userId: ID del usuario en la base de datos
      *   - issuedAt: fecha de emisión
      *   - expiration: fecha de expiración
      */
@@ -61,24 +58,11 @@ public class JwtService {
      */
     private String buildToken(UserDetails userDetails, long expiration) {
 
-        // Casteamos a nuestra entidad User para acceder al ID
-        User user = (User) userDetails;
-        Long userId = user.getId();
-
-        // Extraemos el primer rol del usuario (asumimos un rol por usuario)
-        String userRole = userDetails.getAuthorities().stream()
-                .findFirst()
-                .map(Object::toString)
-                .orElse("USER"); // Rol por defecto si no se encuentra ninguno
-
         return Jwts
                 .builder()
                 // El subject es el email (identificador principal del usuario)
                 .subject(userDetails.getUsername())
                 .issuedAt(new Date(System.currentTimeMillis()))
-                // Claims personalizados: rol e ID del usuario
-                .claim("role", userRole)
-                .claim("userId", userId)
                 .expiration(new Date(System.currentTimeMillis() + expiration))
                 // Firmamos el token con la clave secreta HMAC-SHA256
                 .signWith(getSecretKey())

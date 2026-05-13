@@ -16,11 +16,14 @@ public class SkinCatalogoRequest {
     /** ID externo (ej: el de ByMykel). Si lo creás manual, podés usar prefijo "manual_". */
     private String externalId;
 
+    private String baseSkinId;
     private String name;
+    private String marketHashName;
     private String description;
     private String imageUrl;
     private String weaponName;
     private String categoryName;
+    private String exteriorName;
     private String rarezaName;
     private String rarezaColor;
     private Double minFloat;

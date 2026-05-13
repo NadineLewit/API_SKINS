@@ -6,6 +6,7 @@ import skinsmarket.demo.entity.Skin;
 import skinsmarket.demo.entity.User;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Repositorio de Skins.
@@ -20,9 +21,16 @@ public interface SkinRepository extends JpaRepository<Skin, Long> {
 
     List<Skin> findByActiveTrue();
 
+    Optional<Skin> findByIdAndActiveTrueAndStockGreaterThan(Long id, Integer stock);
+
+    List<Skin> findByActiveTrueAndStockGreaterThan(Integer stock);
+
     List<Skin> findByVendedor(User vendedor);
 
     List<Skin> findByNameContainingIgnoreCase(String name);
+
+    List<Skin> findByNameContainingIgnoreCaseAndActiveTrueAndStockGreaterThan(
+            String name, Integer stock);
 
     /**
      * Filtra publicaciones por la categoría del catálogo asociado.
@@ -31,9 +39,21 @@ public interface SkinRepository extends JpaRepository<Skin, Long> {
      */
     List<Skin> findByCatalogo_CategoryNameContainingIgnoreCase(String categoryName);
 
+    List<Skin> findByCatalogo_CategoryNameContainingIgnoreCaseAndActiveTrueAndStockGreaterThan(
+            String categoryName, Integer stock);
+
     List<Skin> findByPriceBetween(Double min, Double max);
+
+    List<Skin> findByPriceBetweenAndActiveTrueAndStockGreaterThan(
+            Double min, Double max, Integer stock);
 
     List<Skin> findByPriceLessThanEqual(Double max);
 
+    List<Skin> findByPriceLessThanEqualAndActiveTrueAndStockGreaterThan(
+            Double max, Integer stock);
+
     List<Skin> findByPriceGreaterThanEqual(Double min);
+
+    List<Skin> findByPriceGreaterThanEqualAndActiveTrueAndStockGreaterThan(
+            Double min, Integer stock);
 }

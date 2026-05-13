@@ -67,7 +67,7 @@ public class UserServiceImpl implements UserService {
         // ── Cambio de username con restricción de 15 días ──────────────────
         if (request.getUsername() != null
                 && !request.getUsername().isBlank()
-                && !request.getUsername().equals(user.getUsername())) {
+                && !request.getUsername().equals(user.getRealUsername())) {
 
             if (user.getUsernameChangedAt() != null) {
                 long diasDesdeUltimoCambio = ChronoUnit.DAYS.between(
@@ -159,6 +159,7 @@ public class UserServiceImpl implements UserService {
         for (User user : userRepository.findAll()) {
             AdminUserResponse resp = new AdminUserResponse();
             resp.setId(user.getId());
+            resp.setUsername(user.getRealUsername());
             resp.setEmail(user.getEmail());
             resp.setFirstName(user.getFirstName());
             resp.setLastName(user.getLastName());
@@ -170,6 +171,7 @@ public class UserServiceImpl implements UserService {
 
     private UserResponse mapToResponse(User user) {
         UserResponse r = new UserResponse();
+        r.setUsername(user.getRealUsername());
         r.setEmail(user.getEmail());
         r.setFirstName(user.getFirstName());
         r.setLastName(user.getLastName());

@@ -16,6 +16,9 @@ public class AdminUserResponse {
     // Identificador único del usuario en la base de datos
     private Long id;
 
+    // Username público del usuario
+    private String username;
+
     // Email del usuario (identificador principal en el sistema)
     private String email;
 

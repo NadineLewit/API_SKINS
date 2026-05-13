@@ -93,6 +93,14 @@ public class User implements UserDetails {
         return email;
     }
 
+    /**
+     * Username visible del usuario. getUsername() queda reservado para Spring
+     * Security y devuelve el email usado como login.
+     */
+    public String getRealUsername() {
+        return username;
+    }
+
     @Override
     public boolean isAccountNonExpired() { return true; }
 

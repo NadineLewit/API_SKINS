@@ -27,6 +27,11 @@ public class InfoValidator {
      * @return true si la contraseña es válida, false en caso contrario
      */
     public static boolean isValidPassword(String password, String passwordRepeat) {
+        if (password == null || passwordRepeat == null) {
+            System.out.println("Error: La contraseña y su repetición son obligatorias.");
+            return false;
+        }
+
         // 1. Verificar que ambas contraseñas sean iguales
         if (!password.equals(passwordRepeat)) {
             System.out.println("Error: Las contraseñas no coinciden.");
@@ -88,7 +93,7 @@ public class InfoValidator {
      * @return true si stock >= 0, false si es negativo
      */
     public static boolean isValidStock(Integer stock) {
-        return stock >= 0;
+        return stock != null && stock >= 0;
     }
 
     /**
@@ -100,7 +105,7 @@ public class InfoValidator {
      * @return true si price > 0, false si es 0 o negativo
      */
     public static boolean isValidPrice(Double price) {
-        return price > 0;
+        return price != null && price > 0;
     }
 
     /**
@@ -113,6 +118,6 @@ public class InfoValidator {
      * @return true si 0.0 <= discount <= 1.0, false en caso contrario
      */
     public static boolean isValidDiscount(Double discount) {
-        return discount >= 0 && discount <= 1;
+        return discount != null && discount >= 0 && discount <= 1;
     }
 }

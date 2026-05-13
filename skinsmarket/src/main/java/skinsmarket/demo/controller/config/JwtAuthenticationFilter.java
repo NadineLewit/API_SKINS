@@ -2,6 +2,8 @@ package skinsmarket.demo.controller.config;
 
 import java.io.IOException;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.jsonwebtoken.JwtException;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -16,6 +18,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import skinsmarket.demo.controller.common.ApiResponse;
 
 /**
  * Filtro de autenticación JWT que se ejecuta una sola vez por request.
@@ -39,6 +42,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     // Servicio para cargar los detalles del usuario desde la base de datos
     private final UserDetailsService userDetailsService;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * Lógica principal del filtro: valida el token JWT y autentica al usuario.
@@ -65,38 +70,51 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        // 2. Extraer el token (quitar los primeros 7 caracteres: "Bearer ")
-        jwt = authHeader.substring(7);
+        try {
+            // 2. Extraer el token (quitar los primeros 7 caracteres: "Bearer ")
+            jwt = authHeader.substring(7);
 
-        // 3. Extraer el email (subject) del token
-        userEmail = jwtService.extractUsername(jwt);
+            // 3. Extraer el email (subject) del token
+            userEmail = jwtService.extractUsername(jwt);
 
-        // 4. Si tenemos un email y el usuario aún no está autenticado en el contexto
-        if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            // 4. Si tenemos un email y el usuario aún no está autenticado en el contexto
+            if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
 
-            // Cargar el usuario desde la base de datos
-            UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
+                // Cargar el usuario desde la base de datos
+                UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
 
-            // Validar que el token sea válido (no expirado y corresponde al usuario)
-            if (jwtService.isTokenValid(jwt, userDetails)) {
+                // Validar que el token sea válido (no expirado y corresponde al usuario)
+                if (jwtService.isTokenValid(jwt, userDetails)) {
 
-                // Crear el token de autenticación de Spring con los roles del usuario
-                UsernamePasswordAuthenticationToken authToken =
-                        new UsernamePasswordAuthenticationToken(
-                                userDetails,
-                                null, // Sin credenciales (ya está autenticado)
-                                userDetails.getAuthorities());
+                    // Crear el token de autenticación de Spring con los roles del usuario
+                    UsernamePasswordAuthenticationToken authToken =
+                            new UsernamePasswordAuthenticationToken(
+                                    userDetails,
+                                    null, // Sin credenciales (ya está autenticado)
+                                    userDetails.getAuthorities());
 
-                // Agregar detalles del request (IP, session, etc.)
-                authToken.setDetails(
-                        new WebAuthenticationDetailsSource().buildDetails(request));
+                    // Agregar detalles del request (IP, session, etc.)
+                    authToken.setDetails(
+                            new WebAuthenticationDetailsSource().buildDetails(request));
 
-                // Registrar la autenticación en el contexto de seguridad de Spring
-                SecurityContextHolder.getContext().setAuthentication(authToken);
+                    // Registrar la autenticación en el contexto de seguridad de Spring
+                    SecurityContextHolder.getContext().setAuthentication(authToken);
+                }
             }
+        } catch (JwtException | IllegalArgumentException e) {
+            writeUnauthorized(response);
+            return;
         }
 
         // 5. Continuar con el siguiente filtro en la cadena
         filterChain.doFilter(request, response);
+    }
+
+    private void writeUnauthorized(HttpServletResponse response) throws IOException {
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType("application/json");
+        response.setCharacterEncoding("UTF-8");
+        response.getWriter().write(objectMapper.writeValueAsString(
+                ApiResponse.of("Token inválido o vencido")));
     }
 }

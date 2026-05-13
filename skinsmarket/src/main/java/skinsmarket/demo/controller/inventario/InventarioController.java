@@ -59,7 +59,7 @@ public class InventarioController {
             Map<String, Object> info = new HashMap<>();
             info.put("emailDelToken", email);
             info.put("userId", user.getId());
-            info.put("username", user.getUsername());
+            info.put("username", user.getRealUsername());
             info.put("steamId64", user.getSteamId64());
             info.put("tieneSteamIdConfigurado", user.getSteamId64() != null
                     && !user.getSteamId64().isBlank());

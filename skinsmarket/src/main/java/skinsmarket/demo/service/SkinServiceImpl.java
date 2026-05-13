@@ -27,14 +27,18 @@ import java.util.List;
 @Service
 public class SkinServiceImpl implements SkinService {
 
+    private static final int STOCK_DISPONIBLE_MINIMO = 0;
+
     @Autowired private SkinRepository skinRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private SkinCatalogoRepository skinCatalogoRepository;
 
     @Override
     public Skin getSkinById(Long id) {
-        return skinRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Skin no encontrada: " + id));
+        return skinRepository.findByIdAndActiveTrueAndStockGreaterThan(
+                        id, STOCK_DISPONIBLE_MINIMO)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Skin no encontrada o no disponible: " + id));
     }
 
     @Override
@@ -69,33 +73,38 @@ public class SkinServiceImpl implements SkinService {
 
     @Override
     public List<Skin> getAllAvailableSkins() {
-        return skinRepository.findByActiveTrue().stream()
-                .filter(s -> s.getStock() > 0).toList();
+        return skinRepository.findByActiveTrueAndStockGreaterThan(STOCK_DISPONIBLE_MINIMO);
     }
 
     @Override
     public List<Skin> getSkinsByCategoryName(String categoryName) {
-        return skinRepository.findByCatalogo_CategoryNameContainingIgnoreCase(categoryName);
+        return skinRepository
+                .findByCatalogo_CategoryNameContainingIgnoreCaseAndActiveTrueAndStockGreaterThan(
+                        categoryName, STOCK_DISPONIBLE_MINIMO);
     }
 
     @Override
     public List<Skin> findByRangePrice(Double min, Double max) {
-        return skinRepository.findByPriceBetween(min, max);
+        return skinRepository.findByPriceBetweenAndActiveTrueAndStockGreaterThan(
+                min, max, STOCK_DISPONIBLE_MINIMO);
     }
 
     @Override
     public List<Skin> findByPriceMax(Double max) {
-        return skinRepository.findByPriceLessThanEqual(max);
+        return skinRepository.findByPriceLessThanEqualAndActiveTrueAndStockGreaterThan(
+                max, STOCK_DISPONIBLE_MINIMO);
     }
 
     @Override
     public List<Skin> findByPriceMin(Double min) {
-        return skinRepository.findByPriceGreaterThanEqual(min);
+        return skinRepository.findByPriceGreaterThanEqualAndActiveTrueAndStockGreaterThan(
+                min, STOCK_DISPONIBLE_MINIMO);
     }
 
     @Override
     public List<Skin> findByName(String name) {
-        return skinRepository.findByNameContainingIgnoreCase(name);
+        return skinRepository.findByNameContainingIgnoreCaseAndActiveTrueAndStockGreaterThan(
+                name, STOCK_DISPONIBLE_MINIMO);
     }
 
     @Override

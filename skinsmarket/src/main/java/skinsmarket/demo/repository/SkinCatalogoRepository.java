@@ -16,6 +16,9 @@ public interface SkinCatalogoRepository extends JpaRepository<SkinCatalogo, Long
     /** Match exacto por nombre completo. Usado en el matching de inventario. */
     Optional<SkinCatalogo> findByName(String name);
 
+    /** Match exacto por nombre de Steam Market, normalmente incluye desgaste. */
+    Optional<SkinCatalogo> findByMarketHashName(String marketHashName);
+
     /** Match parcial case-insensitive. Usado en /catalogo/buscar y como fallback. */
     List<SkinCatalogo> findByNameContainingIgnoreCase(String name);
 

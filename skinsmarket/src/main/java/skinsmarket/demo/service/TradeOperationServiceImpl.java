@@ -190,6 +190,7 @@ public class TradeOperationServiceImpl implements TradeOperationService {
         }
 
         double diferencia = valorMarketplace - valorUsuario;
+        double diferenciaAPagar = Math.max(diferencia, 0.0);
 
         // Crear la Order de intercambio
         Order order = new Order();
@@ -197,9 +198,9 @@ public class TradeOperationServiceImpl implements TradeOperationService {
         order.setDate(LocalDateTime.now());
         order.setOperationType(OperationType.EXCHANGE);
         order.setTradeStatus(TradeStatus.WAITING_USER_TRADE);
-        order.setPaymentStatus(diferencia > 0 ? "PENDING_PAYMENT" : "N/A");
+        order.setPaymentStatus(diferenciaAPagar > 0 ? "PENDING_PAYMENT" : "N/A");
         order.setTotalPrice(valorMarketplace);
-        order.setTotalFinal(valorMarketplace);
+        order.setTotalFinal(diferenciaAPagar);
         order.setDescuentoAplicado(0.0);
         order.setPriceDifference(diferencia);
         order.setUserSkinAssetIds(serializeAssetIds(userAssetIds));

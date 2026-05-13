@@ -30,7 +30,8 @@ collection:
             {
               "username": "nuevoUser",
               "email": "nuevo@mail.com",
-              "password": "1234",
+              "password": "pass123",
+              "passwordRepeat": "pass123",
               "firstName": "Nuevo",
               "lastName": "Usuario"
             }

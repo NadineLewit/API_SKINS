@@ -96,7 +96,7 @@ public class PaymentServiceImpl implements PaymentService {
         if (!order.getUser().getEmail().equals(email)) {
             throw new RuntimeException("La orden no pertenece al usuario autenticado");
         }
-        validatePaymentAmount(order);
+        validatePayableOrder(order);
 
         MercadoPagoConfig.setAccessToken(accessToken);
 
@@ -105,7 +105,7 @@ public class PaymentServiceImpl implements PaymentService {
                 .title("Orden #" + order.getId() + " - Skins Market")
                 .description(buildDescription(order))
                 .quantity(1)
-                .unitPrice(BigDecimal.valueOf(order.getTotalFinal()).setScale(2, RoundingMode.HALF_UP))
+                .unitPrice(BigDecimal.valueOf(paymentAmount(order)).setScale(2, RoundingMode.HALF_UP))
                 .currencyId(currencyId)
                 .build();
 
@@ -163,12 +163,12 @@ public class PaymentServiceImpl implements PaymentService {
         if (request.getPaymentMethodId() == null || request.getPaymentMethodId().isBlank()) {
             throw new RuntimeException("Falta payment_method_id/paymentMethodId");
         }
-        validatePaymentAmount(order);
+        validatePayableOrder(order);
 
         MercadoPagoConfig.setAccessToken(accessToken);
 
         PaymentCreateRequest.PaymentCreateRequestBuilder paymentBuilder = PaymentCreateRequest.builder()
-                .transactionAmount(BigDecimal.valueOf(order.getTotalFinal()).setScale(2, RoundingMode.HALF_UP))
+                .transactionAmount(BigDecimal.valueOf(paymentAmount(order)).setScale(2, RoundingMode.HALF_UP))
                 .token(blankToNull(request.getToken()))
                 .description(firstNonBlank(request.getDescription(), buildDescription(order)))
                 .installments(request.getInstallments() != null ? request.getInstallments() : 1)
@@ -235,6 +235,14 @@ public class PaymentServiceImpl implements PaymentService {
         order.setPaymentStatus(newStatus);
         orderRepository.save(order);
 
+        if ("PAID".equals(newStatus)
+                && order.getOperationType() == OperationType.EXCHANGE
+                && order.getTradeStatus() == skinsmarket.demo.entity.TradeStatus.WAITING_DIFFERENCE) {
+            order.setTradeStatus(skinsmarket.demo.entity.TradeStatus.PREPARING_TRADE);
+            orderRepository.save(order);
+            botFileService.updateStatus(order.getId(), order.getTradeStatus().name());
+        }
+
         // Si la compra fue pagada con éxito y es PURCHASE, crear entrada en orders.json
         if ("PAID".equals(newStatus) && order.getOperationType() == OperationType.PURCHASE) {
             crearBotOrderParaCompra(order);
@@ -276,14 +284,28 @@ public class PaymentServiceImpl implements PaymentService {
         }
     }
 
-    private void validatePaymentAmount(Order order) {
-        if (order.getTotalFinal() == null || order.getTotalFinal() <= 0) {
+    private void validatePayableOrder(Order order) {
+        if (order.getOperationType() == OperationType.SALE || order.getOperationType() == OperationType.RETURN) {
+            throw new RuntimeException("Las operaciones " + order.getOperationType() + " no se pagan por Mercado Pago");
+        }
+        if (order.getOperationType() == OperationType.EXCHANGE
+                && (order.getPriceDifference() == null || order.getPriceDifference() <= 0)) {
+            throw new RuntimeException("Este intercambio no tiene diferencia positiva para pagar");
+        }
+        if (paymentAmount(order) <= 0) {
             throw new RuntimeException(
                     "La orden " + order.getId() + " tiene totalFinal inválido para pagar: "
                             + order.getTotalFinal() + ". Usá el order_id devuelto por la preferencia más reciente "
                             + "y verificá que la publicación tenga precio mayor a 0."
             );
         }
+    }
+
+    private double paymentAmount(Order order) {
+        if (order.getOperationType() == OperationType.EXCHANGE) {
+            return order.getPriceDifference() != null ? Math.max(order.getPriceDifference(), 0.0) : 0.0;
+        }
+        return order.getTotalFinal() != null ? order.getTotalFinal() : 0.0;
     }
 
     private PaymentPayerRequest buildPayer(Order order, BrickPaymentRequest request) {

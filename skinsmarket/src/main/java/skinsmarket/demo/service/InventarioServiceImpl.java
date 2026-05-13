@@ -191,6 +191,10 @@ public class InventarioServiceImpl implements InventarioService {
     private SkinCatalogo matchearConCatalogo(String marketHashName) {
         if (marketHashName == null || marketHashName.isBlank()) return null;
 
+        Optional<SkinCatalogo> exactoPorMarketHash =
+                skinCatalogoRepository.findByMarketHashName(marketHashName);
+        if (exactoPorMarketHash.isPresent()) return exactoPorMarketHash.get();
+
         Optional<SkinCatalogo> exacto = skinCatalogoRepository.findByName(marketHashName);
         if (exacto.isPresent()) return exacto.get();
 

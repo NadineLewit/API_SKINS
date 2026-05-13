@@ -9,8 +9,9 @@ import lombok.NoArgsConstructor;
 /**
  * Entidad SkinCatalogo — catálogo maestro de skins reales de CS2.
  *
- * Cada registro corresponde a un modelo de skin del juego (ej "AK-47 | Redline"),
- * sin importar quién lo posea. Se importa desde la API de ByMykel/CSGO-API.
+ * Cada registro corresponde a un modelo de skin del juego con su desgaste
+ * cuando ByMykel lo provee (ej "AK-47 | Redline (Field-Tested)").
+ * Se importa desde la API de ByMykel/CSGO-API.
  *
  * Es la fuente de verdad para nombres, descripciones e imágenes oficiales.
  * Las publicaciones de venta (Skin) referencian este catálogo y heredan los
@@ -32,9 +33,17 @@ public class SkinCatalogo {
     @Column(name = "external_id", nullable = false, unique = true, length = 100)
     private String externalId;
 
-    /** Nombre canónico de la skin (ej: "AK-47 | Redline"). */
+    /** ID del modelo base en ByMykel, compartido por todos sus desgastes. */
+    @Column(name = "base_skin_id", length = 100)
+    private String baseSkinId;
+
+    /** Nombre canónico de la skin (ej: "AK-47 | Redline (Field-Tested)"). */
     @Column(nullable = false, length = 300)
     private String name;
+
+    /** Nombre de Steam Market, normalmente incluye el desgaste. */
+    @Column(name = "market_hash_name", length = 300)
+    private String marketHashName;
 
     @Column(length = 1000)
     private String description;
@@ -50,6 +59,10 @@ public class SkinCatalogo {
     /** Categoría (ej: "Rifle", "Knife", "Pistol"). */
     @Column(name = "category_name", length = 100)
     private String categoryName;
+
+    /** Exterior/desgaste oficial (ej: "Factory New", "Battle-Scarred"). */
+    @Column(name = "exterior_name", length = 100)
+    private String exteriorName;
 
     /** Nombre de la rareza en inglés (ej: "Classified", "Covert"). */
     @Column(name = "rareza_name", length = 50)

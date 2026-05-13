@@ -20,10 +20,10 @@ import java.util.Optional;
  * Implementación del servicio de catálogo maestro de skins.
  *
  * Cliente de la API pública de ByMykel/CSGO-API:
- *   https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/skins.json
+ *   https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/skins_not_grouped.json
  *
  * Sin API key. La API tiene ~22.000 skins de CS2 con metadata completa
- * (nombre, descripción, imagen, rareza, exterior soportado, etc.).
+ * (nombre, descripción, imagen, rareza, exterior/desgaste, etc.).
  *
  * IMPORTANTE: usamos raw.githubusercontent.com (no bymykel.github.io) porque
  * GitHub Pages sirve el JSON con Content-Type incorrecto (text/html), lo que
@@ -33,7 +33,7 @@ import java.util.Optional;
 public class SkinCatalogoServiceImpl implements SkinCatalogoService {
 
     private static final String API_URL =
-            "https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/skins.json";
+            "https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/skins_not_grouped.json";
 
     @Autowired
     private SkinCatalogoRepository skinCatalogoRepository;
@@ -104,6 +104,8 @@ public class SkinCatalogoServiceImpl implements SkinCatalogoService {
                 }
 
                 cat.setName(s.getName());
+                cat.setBaseSkinId(s.getSkin_id());
+                cat.setMarketHashName(s.getMarket_hash_name());
                 cat.setDescription(s.getDescription());
                 cat.setImageUrl(s.getImage());
                 cat.setMinFloat(s.getMin_float());
@@ -116,6 +118,9 @@ public class SkinCatalogoServiceImpl implements SkinCatalogoService {
                 }
                 if (s.getCategory() != null && s.getCategory().getName() != null) {
                     cat.setCategoryName(s.getCategory().getName());
+                }
+                if (s.getWear() != null && s.getWear().getName() != null) {
+                    cat.setExteriorName(s.getWear().getName());
                 }
                 if (s.getRarity() != null) {
                     cat.setRarezaName(s.getRarity().getName());
@@ -192,11 +197,14 @@ public class SkinCatalogoServiceImpl implements SkinCatalogoService {
 
         SkinCatalogo cat = new SkinCatalogo();
         cat.setExternalId(req.getExternalId());
+        cat.setBaseSkinId(req.getBaseSkinId());
         cat.setName(req.getName());
+        cat.setMarketHashName(req.getMarketHashName());
         cat.setDescription(req.getDescription());
         cat.setImageUrl(req.getImageUrl());
         cat.setWeaponName(req.getWeaponName());
         cat.setCategoryName(req.getCategoryName());
+        cat.setExteriorName(req.getExteriorName());
         cat.setRarezaName(req.getRarezaName());
         cat.setRarezaColor(req.getRarezaColor());
         cat.setMinFloat(req.getMinFloat());
@@ -223,7 +231,9 @@ public class SkinCatalogoServiceImpl implements SkinCatalogoService {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class ByMykelSkin {
         private String id;
+        private String skin_id;
         private String name;
+        private String market_hash_name;
         private String description;
         private String image;
         private Double min_float;
@@ -232,6 +242,7 @@ public class SkinCatalogoServiceImpl implements SkinCatalogoService {
         private Boolean souvenir;
         private ByMykelNamed weapon;
         private ByMykelNamed category;
+        private ByMykelNamed wear;
         private ByMykelRarity rarity;
     }
 

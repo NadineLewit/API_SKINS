@@ -9,9 +9,8 @@ import lombok.NoArgsConstructor;
 /**
  * DTO de respuesta para login Y registro.
  *
- * Solo devuelve el token JWT. El frontend puede decodificar el payload
- * del token para obtener email, rol y cualquier otro claim sin hacer
- * requests adicionales.
+ * Solo devuelve el token JWT mínimo. Para datos del perfil, el frontend
+ * debe consultar /api/v1/users/me.
  *
  * Usado en: POST /api/v1/auth/authenticate y POST /api/v1/auth/register
  */
