@@ -68,6 +68,7 @@ public class MockTradeScheduler {
 
         List<Order> pendientes = orderRepository.findByTradeStatusIn(List.of(
                 TradeStatus.WAITING_PAYMENT,
+                TradeStatus.WAITING_UNLOCK,
                 TradeStatus.WAITING_USER_TRADE,
                 TradeStatus.PREPARING_TRADE,
                 TradeStatus.BOT_SENT,
@@ -98,8 +99,27 @@ public class MockTradeScheduler {
             current == TradeStatus.WAITING_PAYMENT &&
             "PAID".equals(order.getPaymentStatus())) {
 
+            if (tieneSkinsBloqueadas(order)) {
+                avanzarA(order, TradeStatus.WAITING_UNLOCK,
+                        "Compra pagada, esperando desbloqueo de Steam");
+                return;
+            }
+
+            crearBotOrderParaCompra(order);
             avanzarA(order, TradeStatus.PREPARING_TRADE,
                     "Compra pagada, preparando envío del bot");
+            return;
+        }
+
+        // CASO 1b: Reserva pagada → al desbloquearse, preparar entrega
+        if (order.getOperationType() == OperationType.PURCHASE &&
+            current == TradeStatus.WAITING_UNLOCK &&
+            "PAID".equals(order.getPaymentStatus()) &&
+            !tieneSkinsBloqueadas(order)) {
+
+            crearBotOrderParaCompra(order);
+            avanzarA(order, TradeStatus.PREPARING_TRADE,
+                    "Reserva desbloqueada, preparando envío del bot");
             return;
         }
 
@@ -156,10 +176,61 @@ public class MockTradeScheduler {
         TradeStatus prev = order.getTradeStatus();
         order.setTradeStatus(next);
         orderRepository.save(order);
+        if (next == TradeStatus.COMPLETED && order.getOperationType() == OperationType.PURCHASE) {
+            marcarReservasComoEntregadas(order);
+        }
         System.out.println("[MOCK] Orden " + order.getId() + ": " + prev + " → " + next +
                 " (" + mensaje + ")");
         // Reflejar en el archivo del bot
         botFileService.updateStatus(order.getId(), next.name());
+    }
+
+    private boolean tieneSkinsBloqueadas(Order order) {
+        for (OrderDetail d : order.getOrderDetails()) {
+            if (d.getSkin() != null && d.getSkin().isLocked()) return true;
+        }
+        return false;
+    }
+
+    private void crearBotOrderParaCompra(Order order) {
+        BotTradeOrdersFileService.BotOrder bo = new BotTradeOrdersFileService.BotOrder();
+        bo.orderId = order.getId();
+        bo.operationType = OperationType.PURCHASE.name();
+        bo.status = "PAID_READY_TO_SEND";
+        bo.direction = "BOT_TO_USER";
+        bo.partnerSteamId64 = order.getUser().getSteamId64();
+        bo.partnerTradeUrl = order.getUser().getTradeUrl();
+        bo.assetIds = assetIdsDeCompra(order);
+        bo.mockMode = "true";
+        botFileService.upsert(bo);
+    }
+
+    private List<String> assetIdsDeCompra(Order order) {
+        List<String> assetIds = new java.util.ArrayList<>();
+        for (OrderDetail d : order.getOrderDetails()) {
+            if (d.getSkin() == null) continue;
+            String steamAssetId = d.getSkin().getSteamAssetId();
+            String assetId = (steamAssetId != null && !steamAssetId.isBlank())
+                    ? steamAssetId
+                    : "SKIN-" + d.getSkin().getId();
+            int quantity = d.getQuantity() != null ? d.getQuantity() : 1;
+            for (int i = 0; i < quantity; i++) {
+                assetIds.add(assetId);
+            }
+        }
+        return assetIds;
+    }
+
+    private void marcarReservasComoEntregadas(Order order) {
+        List<InventarioItem> pendientes = inventarioItemRepository.findByPendingOrderId(order.getId());
+        for (InventarioItem item : pendientes) {
+            if (!InventarioItem.STATUS_PENDING_DELIVERY.equals(item.getInventoryStatus())) continue;
+            item.setInventoryStatus(InventarioItem.STATUS_DELIVERED);
+            item.setDeliveredAt(LocalDateTime.now());
+            item.setTradable(true);
+            item.setMarketable(true);
+            inventarioItemRepository.save(item);
+        }
     }
 
     private void marcarItemsComoBloqueados(Order order) {

@@ -9,7 +9,7 @@ package skinsmarket.demo.entity;
  * Diagrama de transiciones por tipo de operación:
  *
  * PURCHASE:
- *   WAITING_PAYMENT → PREPARING_TRADE → BOT_SENT → COMPLETED
+ *   WAITING_PAYMENT → WAITING_UNLOCK → PREPARING_TRADE → BOT_SENT → COMPLETED
  *                  ↘ CANCELLED       ↘ EXPIRED / FAILED
  *
  * SALE:
@@ -29,6 +29,9 @@ package skinsmarket.demo.entity;
 public enum TradeStatus {
     /** Esperando que MP confirme el pago (solo PURCHASE). */
     WAITING_PAYMENT,
+
+    /** Compra pagada, pero la skin sigue con trade lock antes de poder enviarla. */
+    WAITING_UNLOCK,
 
     /** Esperando que el USER mande sus skins al bot (SALE / EXCHANGE). */
     WAITING_USER_TRADE,

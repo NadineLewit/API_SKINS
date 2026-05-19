@@ -128,6 +128,9 @@ public class OrderServiceImpl implements OrderService {
             detailResponse.setSkinName(skin.getName());
             detailResponse.setQuantity(item.getQuantity());
             detailResponse.setUnitPrice(finalPrice);
+            detailResponse.setLocked(skin.isLocked());
+            detailResponse.setLockedUntil(skin.getLockedUntil());
+            detailResponse.setSecondsUntilUnlock(skin.getSecondsUntilUnlock());
             detailResponses.add(detailResponse);
 
             totalPrice += item.getQuantity() * finalPrice;
@@ -174,6 +177,8 @@ public class OrderServiceImpl implements OrderService {
         response.setDescuentoAplicado(descuentoAplicado);
         response.setTotalFinal(totalFinal);
         response.setPaymentStatus(order.getPaymentStatus());
+        response.setOperationType(order.getOperationType().name());
+        response.setTradeStatus(order.getTradeStatus().name());
         response.setMercadopagoPreferenceId(order.getMercadopagoPreferenceId());
         response.setMercadopagoPaymentId(order.getMercadopagoPaymentId());
         response.setOrderDetailResponses(detailResponses);
@@ -210,6 +215,8 @@ public class OrderServiceImpl implements OrderService {
         resp.setDescuentoAplicado(order.getDescuentoAplicado());
         resp.setTotalFinal(order.getTotalFinal());
         resp.setPaymentStatus(order.getPaymentStatus());
+        resp.setOperationType(order.getOperationType() != null ? order.getOperationType().name() : null);
+        resp.setTradeStatus(order.getTradeStatus() != null ? order.getTradeStatus().name() : null);
         resp.setMercadopagoPreferenceId(order.getMercadopagoPreferenceId());
         resp.setMercadopagoPaymentId(order.getMercadopagoPaymentId());
 
@@ -220,6 +227,9 @@ public class OrderServiceImpl implements OrderService {
             d.setSkinName(od.getSkin() != null ? od.getSkin().getName() : null);
             d.setQuantity(od.getQuantity());
             d.setUnitPrice(od.getUnitPrice());
+            d.setLocked(od.getSkin() != null && od.getSkin().isLocked());
+            d.setLockedUntil(od.getSkin() != null ? od.getSkin().getLockedUntil() : null);
+            d.setSecondsUntilUnlock(od.getSkin() != null ? od.getSkin().getSecondsUntilUnlock() : 0L);
             details.add(d);
         }
         resp.setOrderDetailResponses(details);

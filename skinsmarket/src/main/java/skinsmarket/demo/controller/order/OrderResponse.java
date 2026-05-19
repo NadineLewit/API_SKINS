@@ -32,6 +32,10 @@ public class OrderResponse {
 
     private String paymentStatus;
 
+    private String operationType;
+
+    private String tradeStatus;
+
     private String mercadopagoPreferenceId;
 
     private Long mercadopagoPaymentId;

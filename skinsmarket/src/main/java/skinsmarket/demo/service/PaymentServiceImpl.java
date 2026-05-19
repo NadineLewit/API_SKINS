@@ -24,13 +24,18 @@ import skinsmarket.demo.controller.payment.BrickPaymentRequest;
 import skinsmarket.demo.controller.payment.BrickPaymentResponse;
 import skinsmarket.demo.controller.payment.BrickPreferenceResponse;
 import skinsmarket.demo.controller.payment.MercadoPagoWebhookRequest;
+import skinsmarket.demo.entity.InventarioItem;
 import skinsmarket.demo.entity.OperationType;
 import skinsmarket.demo.entity.Order;
 import skinsmarket.demo.entity.OrderDetail;
+import skinsmarket.demo.entity.Skin;
+import skinsmarket.demo.entity.TradeStatus;
+import skinsmarket.demo.repository.InventarioItemRepository;
 import skinsmarket.demo.repository.OrderRepository;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -60,6 +65,9 @@ public class PaymentServiceImpl implements PaymentService {
     /** ✨ NUEVO: para escribir entradas en orders.json al confirmar pago. */
     @Autowired
     private BotTradeOrdersFileService botFileService;
+
+    @Autowired
+    private InventarioItemRepository inventarioItemRepository;
 
     @Value("${mercadopago.access-token}")
     private String accessToken;
@@ -225,9 +233,9 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     /**
-     * ✨ NUEVO: cuando el payment se actualiza, si pasa a PAID y es una compra,
-     * escribimos una entrada en orders.json para que el bot prepare el envío
-     * (o el MockTradeScheduler lo procese automáticamente).
+     * Cuando el payment se actualiza, si pasa a PAID y es una compra,
+     * entrega ahora si la skin ya está libre o crea una reserva interna si
+     * todavía está bloqueada.
      */
     private void updateOrderWithPayment(Order order, Payment payment) {
         order.setMercadopagoPaymentId(payment.getId());
@@ -237,26 +245,78 @@ public class PaymentServiceImpl implements PaymentService {
 
         if ("PAID".equals(newStatus)
                 && order.getOperationType() == OperationType.EXCHANGE
-                && order.getTradeStatus() == skinsmarket.demo.entity.TradeStatus.WAITING_DIFFERENCE) {
-            order.setTradeStatus(skinsmarket.demo.entity.TradeStatus.PREPARING_TRADE);
+                && order.getTradeStatus() == TradeStatus.WAITING_DIFFERENCE) {
+            order.setTradeStatus(TradeStatus.PREPARING_TRADE);
             orderRepository.save(order);
             botFileService.updateStatus(order.getId(), order.getTradeStatus().name());
         }
 
-        // Si la compra fue pagada con éxito y es PURCHASE, crear entrada en orders.json
+        // Si la compra fue pagada con éxito y es PURCHASE, se entrega ahora o
+        // queda reservada si alguna skin todavía está bloqueada.
         if ("PAID".equals(newStatus) && order.getOperationType() == OperationType.PURCHASE) {
-            crearBotOrderParaCompra(order);
+            if (tieneSkinsBloqueadas(order)) {
+                crearItemsPendientesPorReserva(order);
+                order.setTradeStatus(TradeStatus.WAITING_UNLOCK);
+                orderRepository.save(order);
+            } else {
+                crearBotOrderParaCompra(order);
+            }
+        }
+    }
+
+    private boolean tieneSkinsBloqueadas(Order order) {
+        for (OrderDetail d : order.getOrderDetails()) {
+            if (d.getSkin() != null && d.getSkin().isLocked()) return true;
+        }
+        return false;
+    }
+
+    private void crearItemsPendientesPorReserva(Order order) {
+        for (OrderDetail d : order.getOrderDetails()) {
+            Skin skin = d.getSkin();
+            if (skin == null || !skin.isLocked()) continue;
+
+            inventarioItemRepository
+                    .findByUserAndPendingOrderIdAndPendingSkinId(order.getUser(), order.getId(), skin.getId())
+                    .orElseGet(() -> {
+                        InventarioItem pendiente = InventarioItem.builder()
+                                .user(order.getUser())
+                                .assetId("PENDING-" + order.getId() + "-" + skin.getId())
+                                .publicado(false)
+                                .build();
+                        pendiente.setName(skin.getName());
+                        pendiente.setMarketHashName(skin.getName());
+                        pendiente.setIconUrl(skin.getImageUrl());
+                        pendiente.setType(skin.getCatalogo() != null ? skin.getCatalogo().getCategoryName() : null);
+                        pendiente.setTradable(false);
+                        pendiente.setMarketable(false);
+                        pendiente.setCatalogo(skin.getCatalogo());
+                        pendiente.setFechaSync(LocalDateTime.now());
+                        pendiente.setInventoryStatus(InventarioItem.STATUS_PENDING_DELIVERY);
+                        pendiente.setPendingOrderId(order.getId());
+                        pendiente.setPendingSkinId(skin.getId());
+                        pendiente.setPendingUntil(skin.getLockedUntil());
+                        return inventarioItemRepository.save(pendiente);
+                    });
         }
     }
 
     private void crearBotOrderParaCompra(Order order) {
         List<String> assetIds = new ArrayList<>();
         // En PURCHASE, los assetIds reales son del bot.
-        // Por ahora dejamos vacío — el bot real elegirá qué assetId mandar.
-        // Lo que importa son los Skin.id que el bot tiene que entregar.
+        // Si la publicación nació desde inventario, ya guardamos el assetId real.
+        // Las publicaciones admin pueden no tenerlo; en ese caso mantenemos el
+        // identificador lógico para el mock.
         for (OrderDetail d : order.getOrderDetails()) {
             if (d.getSkin() != null) {
-                assetIds.add("SKIN-" + d.getSkin().getId());
+                String steamAssetId = d.getSkin().getSteamAssetId();
+                String assetId = (steamAssetId != null && !steamAssetId.isBlank())
+                        ? steamAssetId
+                        : "SKIN-" + d.getSkin().getId();
+                int quantity = d.getQuantity() != null ? d.getQuantity() : 1;
+                for (int i = 0; i < quantity; i++) {
+                    assetIds.add(assetId);
+                }
             }
         }
 
@@ -375,6 +435,8 @@ public class PaymentServiceImpl implements PaymentService {
         response.setDescuentoAplicado(order.getDescuentoAplicado());
         response.setTotalFinal(order.getTotalFinal());
         response.setPaymentStatus(order.getPaymentStatus());
+        response.setOperationType(order.getOperationType() != null ? order.getOperationType().name() : null);
+        response.setTradeStatus(order.getTradeStatus() != null ? order.getTradeStatus().name() : null);
         response.setMercadopagoPreferenceId(order.getMercadopagoPreferenceId());
         response.setMercadopagoPaymentId(order.getMercadopagoPaymentId());
         response.setOrderDetailResponses(order.getOrderDetails().stream()
@@ -389,6 +451,9 @@ public class PaymentServiceImpl implements PaymentService {
         response.setSkinName(detail.getSkin() != null ? detail.getSkin().getName() : null);
         response.setQuantity(detail.getQuantity());
         response.setUnitPrice(detail.getUnitPrice());
+        response.setLocked(detail.getSkin() != null && detail.getSkin().isLocked());
+        response.setLockedUntil(detail.getSkin() != null ? detail.getSkin().getLockedUntil() : null);
+        response.setSecondsUntilUnlock(detail.getSkin() != null ? detail.getSkin().getSecondsUntilUnlock() : 0L);
         return response;
     }
 

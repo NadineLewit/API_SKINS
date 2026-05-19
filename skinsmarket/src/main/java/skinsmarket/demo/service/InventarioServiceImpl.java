@@ -46,6 +46,8 @@ import java.util.Optional;
 @Service
 public class InventarioServiceImpl implements InventarioService {
 
+    private static final int PUBLICATION_TRADE_LOCK_DAYS = 7;
+
     private static final String STEAM_INVENTORY_URL =
             "https://steamcommunity.com/inventory/{STEAM_ID}/730/2?l=english&count=2000";
 
@@ -162,6 +164,11 @@ public class InventarioServiceImpl implements InventarioService {
                 item.setTradable(desc.getTradable() != null && desc.getTradable() == 1);
                 item.setMarketable(desc.getMarketable() != null && desc.getMarketable() == 1);
                 item.setFechaSync(ahora);
+                item.setInventoryStatus(InventarioItem.STATUS_STEAM);
+                item.setPendingOrderId(null);
+                item.setPendingSkinId(null);
+                item.setPendingUntil(null);
+                item.setDeliveredAt(null);
 
                 SkinCatalogo catalogo = matchearConCatalogo(desc.getMarket_hash_name());
                 item.setCatalogo(catalogo);
@@ -219,6 +226,7 @@ public class InventarioServiceImpl implements InventarioService {
         int borrados = 0;
         for (InventarioItem item : locales) {
             if (Boolean.TRUE.equals(item.getPublicado())) continue;
+            if (InventarioItem.STATUS_PENDING_DELIVERY.equals(item.getInventoryStatus())) continue;
             if (!assetIdsActuales.contains(item.getAssetId())) {
                 inventarioItemRepository.delete(item);
                 borrados++;
@@ -324,6 +332,8 @@ public class InventarioServiceImpl implements InventarioService {
         }
 
         SkinCatalogo cat = item.getCatalogo();
+        LocalDateTime ahora = LocalDateTime.now();
+
         Skin skin = new Skin();
         skin.setName(cat.getName());
         skin.setDescription(cat.getDescription());
@@ -334,9 +344,13 @@ public class InventarioServiceImpl implements InventarioService {
         skin.setStock(1);
         skin.setActive(true);
         skin.setStattrak(false);
-        skin.setFechaAlta(LocalDateTime.now());
+        skin.setFechaAlta(ahora);
         skin.setVendedor(user);
         skin.setCatalogo(cat);
+        skin.setInventarioItem(item);
+        skin.setSteamAssetId(item.getAssetId());
+        skin.setBotReceivedAt(ahora);
+        skin.setLockedUntil(ahora.plusDays(PUBLICATION_TRADE_LOCK_DAYS));
 
         Skin saved = skinRepository.save(skin);
 

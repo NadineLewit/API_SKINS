@@ -1,8 +1,10 @@
 package skinsmarket.demo.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.Data;
+import java.time.Duration;
 import java.time.LocalDateTime;
 
 /**
@@ -66,6 +68,38 @@ public class Skin {
     @JoinColumn(name = "catalogo_id")
     private SkinCatalogo catalogo;
 
+    /**
+     * Item real del inventario de Steam que originó esta publicación.
+     * Se mantiene oculto en JSON para no serializar todo el inventario/usuario.
+     */
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "inventario_item_id", unique = true)
+    @JsonIgnore
+    private InventarioItem inventarioItem;
+
+    /**
+     * AssetID real en Steam. El bot lo necesita para entregar exactamente esta
+     * skin cuando se venda. Las publicaciones admin pueden no tenerlo.
+     */
+    @Column(name = "steam_asset_id", length = 100)
+    @JsonIgnore
+    private String steamAssetId;
+
+    /**
+     * Momento en que asumimos que el bot recibió el item.
+     * Mientras el bot real no esté activo, se setea al publicar para simular
+     * el depósito correcto y poder arrancar el bloqueo de 7 días.
+     */
+    @Column(name = "bot_received_at")
+    private LocalDateTime botReceivedAt;
+
+    /**
+     * Hasta cuándo la publicación se puede reservar, pero no entregar por Steam.
+     * Representa el trade lock de Steam después de recibir el item.
+     */
+    @Column(name = "locked_until")
+    private LocalDateTime lockedUntil;
+
     @Enumerated(EnumType.STRING)
     private Rareza rareza;
 
@@ -77,6 +111,17 @@ public class Skin {
 
     public Double getFinalPrice() {
         return price - (price * discount);
+    }
+
+    @JsonProperty("locked")
+    public boolean isLocked() {
+        return lockedUntil != null && lockedUntil.isAfter(LocalDateTime.now());
+    }
+
+    @JsonProperty("secondsUntilUnlock")
+    public long getSecondsUntilUnlock() {
+        if (!isLocked()) return 0L;
+        return Math.max(0L, Duration.between(LocalDateTime.now(), lockedUntil).getSeconds());
     }
 
     public enum Rareza {

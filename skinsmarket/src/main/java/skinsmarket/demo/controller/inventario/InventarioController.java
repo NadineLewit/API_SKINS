@@ -133,6 +133,10 @@ public class InventarioController {
                 info.put("marketable", item.getMarketable());
                 info.put("publicado", item.getPublicado());
                 info.put("iconUrl", item.getIconUrl());
+                info.put("inventoryStatus", item.getInventoryStatus());
+                info.put("pending", item.isPending());
+                info.put("pendingUntil", item.getPendingUntil());
+                info.put("secondsUntilUnlock", item.getSecondsUntilUnlock());
 
                 boolean tieneCatalogo = item.getCatalogo() != null;
                 boolean esTradeable = Boolean.TRUE.equals(item.getTradable());
@@ -150,6 +154,7 @@ public class InventarioController {
                 if (Boolean.TRUE.equals(item.getPublicado())) yaPublicados++;
 
                 List<String> bloqueos = new ArrayList<>();
+                if (item.isPending()) bloqueos.add("reserva pendiente de desbloqueo/entrega");
                 if (!tieneCatalogo) bloqueos.add("sin match en el catálogo");
                 if (!esTradeable) bloqueos.add("trade lock activo o intransferible");
                 if (Boolean.TRUE.equals(item.getPublicado())) bloqueos.add("ya publicado");

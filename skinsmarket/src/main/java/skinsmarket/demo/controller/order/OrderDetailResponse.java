@@ -2,6 +2,8 @@ package skinsmarket.demo.controller.order;
 
 import lombok.Data;
 
+import java.time.LocalDateTime;
+
 /**
  * DTO de respuesta para cada ítem dentro de una orden de compra.
  *
@@ -22,4 +24,10 @@ public class OrderDetailResponse {
     // Precio unitario de la skin al momento de la compra
     // Se guarda el precio histórico para que no cambie si la skin se actualiza después
     private Double unitPrice;
+
+    private Boolean locked;
+
+    private LocalDateTime lockedUntil;
+
+    private Long secondsUntilUnlock;
 }

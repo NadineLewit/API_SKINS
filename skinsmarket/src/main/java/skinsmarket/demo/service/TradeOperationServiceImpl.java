@@ -181,6 +181,11 @@ public class TradeOperationServiceImpl implements TradeOperationService {
             if (skin.getStock() < 1) {
                 throw new RuntimeException("La skin '" + skin.getName() + "' está sin stock");
             }
+            if (skin.isLocked()) {
+                throw new RuntimeException(
+                        "La skin '" + skin.getName() + "' está bloqueada hasta " +
+                                skin.getLockedUntil() + " y todavía no se puede intercambiar");
+            }
             if (skin.getVendedor() != null && skin.getVendedor().getEmail().equals(email)) {
                 throw new RuntimeException(
                         "No podés intercambiar por una skin que vos mismo publicaste");
@@ -476,6 +481,9 @@ public class TradeOperationServiceImpl implements TradeOperationService {
             rd.setSkinName(d.getSkin() != null ? d.getSkin().getName() : null);
             rd.setQuantity(d.getQuantity());
             rd.setUnitPrice(d.getUnitPrice());
+            rd.setLocked(d.getSkin() != null && d.getSkin().isLocked());
+            rd.setLockedUntil(d.getSkin() != null ? d.getSkin().getLockedUntil() : null);
+            rd.setSecondsUntilUnlock(d.getSkin() != null ? d.getSkin().getSecondsUntilUnlock() : 0L);
             details.add(rd);
         }
         r.setOrderDetailResponses(details);
@@ -486,6 +494,7 @@ public class TradeOperationServiceImpl implements TradeOperationService {
         if (s == null) return "Estado desconocido";
         return switch (s) {
             case WAITING_PAYMENT -> "Esperando confirmación de pago";
+            case WAITING_UNLOCK -> "Reserva pagada. Esperando que la skin se desbloquee para enviarla por Steam.";
             case WAITING_USER_TRADE -> "Esperando que envíes la oferta de trade al bot";
             case USER_TRADE_RECEIVED -> "El bot recibió tus skins";
             case WAITING_DIFFERENCE -> "Esperando que pagues la diferencia";

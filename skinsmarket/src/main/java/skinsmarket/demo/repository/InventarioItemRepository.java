@@ -22,4 +22,11 @@ public interface InventarioItemRepository extends JpaRepository<InventarioItem, 
 
     /** Borra todos los items de un user (útil para resync limpio). */
     void deleteByUser(User user);
+
+    /** Busca un item pendiente creado por una reserva pagada. */
+    Optional<InventarioItem> findByUserAndPendingOrderIdAndPendingSkinId(
+            User user, Long pendingOrderId, Long pendingSkinId);
+
+    /** Items internos creados para una orden de compra pendiente/entregada. */
+    List<InventarioItem> findByPendingOrderId(Long pendingOrderId);
 }

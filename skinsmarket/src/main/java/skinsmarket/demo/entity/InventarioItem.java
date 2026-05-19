@@ -1,12 +1,14 @@
 package skinsmarket.demo.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 
 /**
@@ -35,6 +37,10 @@ import java.time.LocalDateTime;
 @Table(name = "inventario_items",
         uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "asset_id"}))
 public class InventarioItem {
+
+    public static final String STATUS_STEAM = "STEAM";
+    public static final String STATUS_PENDING_DELIVERY = "PENDING_DELIVERY";
+    public static final String STATUS_DELIVERED = "DELIVERED";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -113,4 +119,39 @@ public class InventarioItem {
     /** Última vez que se sincronizó este item con Steam. */
     @Column(name = "fecha_sync")
     private LocalDateTime fechaSync;
+
+    /**
+     * Diferencia items reales sincronizados desde Steam de reservas pagadas que
+     * todavía están esperando desbloqueo/entrega.
+     */
+    @Column(name = "inventory_status", length = 30)
+    @Builder.Default
+    private String inventoryStatus = STATUS_STEAM;
+
+    /** Orden que creó este item pendiente dentro del inventario interno. */
+    @Column(name = "pending_order_id")
+    private Long pendingOrderId;
+
+    /** Publicación reservada. Se guarda como id simple para evitar ciclos JSON. */
+    @Column(name = "pending_skin_id")
+    private Long pendingSkinId;
+
+    /** Fecha estimada en que la reserva se desbloquea y puede entregarse por Steam. */
+    @Column(name = "pending_until")
+    private LocalDateTime pendingUntil;
+
+    /** Fecha en que el mock/bot marcó entregada la reserva. */
+    @Column(name = "delivered_at")
+    private LocalDateTime deliveredAt;
+
+    @JsonProperty("pending")
+    public boolean isPending() {
+        return STATUS_PENDING_DELIVERY.equals(inventoryStatus);
+    }
+
+    @JsonProperty("secondsUntilUnlock")
+    public long getSecondsUntilUnlock() {
+        if (pendingUntil == null || !pendingUntil.isAfter(LocalDateTime.now())) return 0L;
+        return Math.max(0L, Duration.between(LocalDateTime.now(), pendingUntil).getSeconds());
+    }
 }
