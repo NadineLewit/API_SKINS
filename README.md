@@ -59,7 +59,7 @@ La API usa **JWT Bearer Token**. El token se obtiene al registrarse o hacer logi
 Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...
 ```
 
-### Obtener un token
+### Registro, verificación y login
 
 **Registrarse:**
 ```http
@@ -76,6 +76,19 @@ Content-Type: application/json
 }
 ```
 
+El registro no devuelve JWT. Devuelve un mensaje y envía un link de verificación al mail:
+`http://localhost:5173/verify-email?token=...`
+
+**Verificar email:**
+```http
+POST /api/v1/auth/verify-email
+Content-Type: application/json
+
+{
+  "token": "TOKEN_DEL_MAIL"
+}
+```
+
 **Login:**
 ```http
 POST /api/v1/auth/authenticate
@@ -87,7 +100,52 @@ Content-Type: application/json
 }
 ```
 
-Ambos devuelven `{ "access_token": "eyJ..." }`.
+El login devuelve `{ "access_token": "eyJ..." }` solo si el email ya fue verificado.
+
+**Reenviar verificación:**
+```http
+POST /api/v1/auth/resend-verification
+Content-Type: application/json
+
+{
+  "email": "juan@mail.com"
+}
+```
+
+**Recuperar contraseña:**
+```http
+POST /api/v1/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "juan@mail.com"
+}
+```
+
+Si el email está registrado, el backend genera un token de 30 minutos y arma un link:
+`http://localhost:5173/reset-password?token=...`
+
+En desarrollo el link se imprime en consola desde `EmailService`. En producción se puede conectar ese servicio a SMTP sin cambiar los endpoints.
+
+**Cambiar contraseña estando logueado:**
+```http
+POST /api/v1/users/me/password-reset-email
+Authorization: Bearer TOKEN
+```
+
+El backend manda el mismo link de recuperación al mail registrado del usuario autenticado.
+
+**Confirmar nueva contraseña:**
+```http
+POST /api/v1/auth/reset-password
+Content-Type: application/json
+
+{
+  "token": "TOKEN_DEL_MAIL",
+  "password": "nueva123",
+  "passwordRepeat": "nueva123"
+}
+```
 
 **Para hacer un usuario ADMIN** (desde MySQL Workbench):
 ```sql
@@ -103,7 +161,11 @@ UPDATE users SET role = 'ADMIN' WHERE email = 'juan@mail.com';
 | Método | URL | Descripción |
 |---|---|---|
 | POST | `/api/v1/auth/register` | Registrar usuario |
+| POST | `/api/v1/auth/verify-email` | Verificar email con token |
+| POST | `/api/v1/auth/resend-verification` | Reenviar link de verificación |
 | POST | `/api/v1/auth/authenticate` | Login |
+| POST | `/api/v1/auth/forgot-password` | Solicitar link de recuperación |
+| POST | `/api/v1/auth/reset-password` | Cambiar contraseña con token |
 
 ---
 
@@ -113,8 +175,10 @@ UPDATE users SET role = 'ADMIN' WHERE email = 'juan@mail.com';
 |---|---|---|
 | GET | `/api/v1/users/me` | Ver mi perfil |
 | PUT | `/api/v1/users/me` | Actualizar mi perfil |
+| POST | `/api/v1/users/me/password-reset-email` | Enviar link para cambiar contraseña |
 
 > El username solo puede cambiarse cada 15 días.
+> El cambio de contraseña se hace por mail, no desde `PUT /api/v1/users/me`.
 
 ---
 

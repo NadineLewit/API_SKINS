@@ -1,7 +1,5 @@
 package skinsmarket.demo.controller.user;
 
-import skinsmarket.demo.controller.auth.AuthenticationRequest;
-import skinsmarket.demo.controller.auth.AuthenticationResponse;
 import skinsmarket.demo.controller.common.ApiResponse;
 import skinsmarket.demo.exception.EmailException;
 import skinsmarket.demo.service.AuthenticationService;
@@ -28,18 +26,14 @@ public class UserController {
 
     private final UserService userService;
 
-    // Necesario para regenerar el token JWT si el usuario cambia su contraseña
     private final AuthenticationService authenticationService;
 
     /**
      * Actualiza los datos del perfil del usuario autenticado.
      * PUT /api/v1/users/me
      *
-     * Si el usuario cambia su contraseña, se genera y devuelve un nuevo token JWT
-     * para que pueda seguir usando la aplicación sin necesidad de volver a loguearse.
-     *
-     * Si solo actualiza otros datos (nombre, apellido, email, username), devuelve
-     * un mensaje de confirmación con los datos actualizados.
+     * La contraseña no se cambia desde este endpoint: se solicita por mail con
+     * POST /api/v1/users/me/password-reset-email y se confirma con el token.
      */
     @PutMapping("/me")
     public ResponseEntity<?> actualizarUser(
@@ -47,15 +41,6 @@ public class UserController {
             @RequestBody UserRequest request) throws EmailException {
 
         UserResponse actualizado = userService.actualizarUser(auth.getName(), request);
-
-        // Si se actualizó la contraseña, generamos un nuevo token JWT y lo devolvemos
-        if (request.getPassword() != null && !request.getPassword().isBlank()) {
-            AuthenticationRequest authReq = new AuthenticationRequest(
-                    actualizado.getEmail(), request.getPassword());
-            AuthenticationResponse authResp = authenticationService.authenticate(authReq);
-            return ResponseEntity.ok(
-                    ApiResponse.of("Perfil y contraseña actualizados — nuevo token generado", authResp));
-        }
 
         return ResponseEntity.ok(
                 ApiResponse.of("Perfil actualizado exitosamente", actualizado));
@@ -69,5 +54,16 @@ public class UserController {
     public ResponseEntity<?> getUserByEmail(Authentication auth) {
         UserResponse user = userService.getUserByEmail(auth.getName());
         return ResponseEntity.ok(ApiResponse.of("Perfil del usuario autenticado", user));
+    }
+
+    /**
+     * Envía al mail registrado un link para cambiar la contraseña.
+     * POST /api/v1/users/me/password-reset-email
+     */
+    @PostMapping("/me/password-reset-email")
+    public ResponseEntity<ApiResponse<Void>> requestPasswordResetEmail(Authentication auth) {
+        authenticationService.requestPasswordResetForAuthenticatedUser(auth.getName());
+        return ResponseEntity.ok(ApiResponse.of(
+                "Te enviamos un mail con el link para cambiar la contraseña."));
     }
 }

@@ -16,4 +16,25 @@ class InfoValidatorTest {
     void passwordIsValidWhenItMatchesRulesAndRepeat() {
         assertTrue(InfoValidator.isValidPassword("pass123", "pass123"));
     }
+
+    @Test
+    void emailIsValidWhenItHasCommonRealFormat() {
+        assertTrue(InfoValidator.isValidEmail("User.Name+tag@gmail.com"));
+    }
+
+    @Test
+    void emailIsInvalidWhenDomainHasNoPublicSuffix() {
+        assertFalse(InfoValidator.isValidEmail("usuario@mail"));
+    }
+
+    @Test
+    void emailIsInvalidWhenDomainLabelStartsWithHyphen() {
+        assertFalse(InfoValidator.isValidEmail("usuario@-mail.com"));
+    }
+
+    @Test
+    void emailIsNormalizedBeforePersistingOrLogin() {
+        assertTrue(InfoValidator.isValidEmail("  USER@MAIL.COM  "));
+        assertTrue(InfoValidator.normalizeEmail("  USER@MAIL.COM  ").equals("user@mail.com"));
+    }
 }

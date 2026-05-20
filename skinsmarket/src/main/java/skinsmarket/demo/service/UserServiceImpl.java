@@ -1,6 +1,7 @@
 package skinsmarket.demo.service;
 
 import skinsmarket.demo.controller.admin.AdminUserResponse;
+import skinsmarket.demo.controller.auth.ForgotPasswordRequest;
 import skinsmarket.demo.controller.user.UserRequest;
 import skinsmarket.demo.controller.user.UserResponse;
 import skinsmarket.demo.entity.Role;
@@ -11,8 +12,9 @@ import skinsmarket.demo.utils.InfoValidator;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -25,7 +27,7 @@ import java.util.Objects;
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
+    private final AuthenticationService authenticationService;
 
     @Autowired
     private InventarioService inventarioService;
@@ -49,20 +51,28 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public UserResponse actualizarUser(String email, UserRequest request) throws EmailException {
 
-        if (request.getEmail() != null) {
-            if (!InfoValidator.isValidEmail(request.getEmail())) {
-                throw new EmailException();
-            }
-            userRepository.findByEmail(request.getEmail()).ifPresent(existing -> {
-                if (!existing.getEmail().equals(email)) {
-                    try { throw new EmailException(); }
-                    catch (EmailException e) { throw new RuntimeException(e); }
-                }
-            });
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El body de actualización es obligatorio");
         }
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        boolean emailCambio = false;
+        if (request.getEmail() != null) {
+            String nuevoEmail = InfoValidator.normalizeEmail(request.getEmail());
+            if (!InfoValidator.isValidEmail(nuevoEmail)) {
+                throw new EmailException();
+            }
+            userRepository.findByEmail(nuevoEmail).ifPresent(existing -> {
+                if (!existing.getId().equals(user.getId())) {
+                    try { throw new EmailException(); }
+                    catch (EmailException e) { throw new RuntimeException(e); }
+                }
+            });
+            request.setEmail(nuevoEmail);
+            emailCambio = !nuevoEmail.equals(user.getEmail());
+        }
 
         // ── Cambio de username con restricción de 15 días ──────────────────
         if (request.getUsername() != null
@@ -93,11 +103,18 @@ public class UserServiceImpl implements UserService {
         }
 
         // ── Resto de campos ────────────────────────────────────────────────
-        if (request.getEmail()     != null) user.setEmail(request.getEmail());
+        if (request.getEmail()     != null) {
+            user.setEmail(request.getEmail());
+            if (emailCambio) {
+                user.setEmailVerified(false);
+            }
+        }
         if (request.getFirstName() != null) user.setFirstName(request.getFirstName());
         if (request.getLastName()  != null) user.setLastName(request.getLastName());
         if (request.getPassword()  != null && !request.getPassword().isBlank()) {
-            user.setPassword(passwordEncoder.encode(request.getPassword()));
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Para cambiar la contraseña solicitá el link por mail.");
         }
 
         // ── Steam ──────────────────────────────────────────────────────────
@@ -120,6 +137,12 @@ public class UserServiceImpl implements UserService {
         }
 
         userRepository.save(user);
+
+        if (emailCambio) {
+            ForgotPasswordRequest verificationRequest = new ForgotPasswordRequest();
+            verificationRequest.setEmail(user.getEmail());
+            authenticationService.resendVerification(verificationRequest);
+        }
 
         // ── Sync automático del inventario si cambió el SteamID ────────────
         // IMPORTANTE: usamos sincronizarAislado() porque está marcado como
@@ -173,6 +196,7 @@ public class UserServiceImpl implements UserService {
         UserResponse r = new UserResponse();
         r.setUsername(user.getRealUsername());
         r.setEmail(user.getEmail());
+        r.setEmailVerified(user.getEmailVerified());
         r.setFirstName(user.getFirstName());
         r.setLastName(user.getLastName());
         r.setSteamId64(user.getSteamId64());

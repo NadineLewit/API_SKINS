@@ -34,6 +34,10 @@ public class User implements UserDetails {
     @Column(nullable = false)
     private String password;
 
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "BOOLEAN DEFAULT TRUE")
+    private Boolean emailVerified = true;
+
     @Column(nullable = false)
     private String firstName;
 

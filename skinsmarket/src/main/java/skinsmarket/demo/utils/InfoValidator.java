@@ -12,6 +12,10 @@ import java.util.regex.Pattern;
  */
 public class InfoValidator {
 
+    private static final Pattern EMAIL_PATTERN = Pattern.compile(
+            "^[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,63}$",
+            Pattern.CASE_INSENSITIVE);
+
     /**
      * Valida que una contraseña cumpla los requisitos mínimos de seguridad
      * y que coincida con su confirmación.
@@ -77,11 +81,32 @@ public class InfoValidator {
      * @return true si el email tiene formato válido, false si es null o inválido
      */
     public static boolean isValidEmail(String email) {
-        // Expresión regular para validar formato de email RFC-compatible
-        String regex = "^[\\w!#$%&'*+/=?`{|}~^-]+(?:\\.[\\w!#$%&'*+/=?`{|}~^-]+)*@(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,6}$";
-        Pattern pattern = Pattern.compile(regex);
-        // Retorna false si el email es null o no coincide con el patrón
-        return email != null && pattern.matcher(email).matches();
+        if (email == null) {
+            return false;
+        }
+
+        String normalized = normalizeEmail(email);
+        if (normalized.length() > 254 || normalized.contains("..") || !EMAIL_PATTERN.matcher(normalized).matches()) {
+            return false;
+        }
+
+        String[] parts = normalized.split("@", -1);
+        if (parts.length != 2 || parts[0].isBlank() || parts[0].length() > 64) {
+            return false;
+        }
+
+        String[] domainLabels = parts[1].split("\\.");
+        for (String label : domainLabels) {
+            if (label.isBlank() || label.startsWith("-") || label.endsWith("-")) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public static String normalizeEmail(String email) {
+        return email == null ? null : email.trim().toLowerCase();
     }
 
     /**

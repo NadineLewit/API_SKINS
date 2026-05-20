@@ -17,6 +17,9 @@ public class UserResponse {
     // Email del usuario (también sirve como identificador visible)
     private String email;
 
+    // Indica si el email fue confirmado desde el link enviado al inbox
+    private Boolean emailVerified;
+
     // Nombre del usuario
     private String firstName;
 
