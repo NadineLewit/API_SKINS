@@ -98,6 +98,10 @@ public class OrderServiceImpl implements OrderService {
 
         for (OrderDetailRequest item : orderRequest.getItemList()) {
             Long skinId = item.getSkinId();
+            int quantity = item.getQuantity() != null ? item.getQuantity() : 1;
+            if (quantity != 1) {
+                throw new RuntimeException("Cada skin publicada es única. La cantidad debe ser 1");
+            }
             Skin skin = skinRepository.findById(skinId)
                     .orElseThrow(() -> new IllegalArgumentException("Skin no encontrada: " + skinId));
 
@@ -108,34 +112,34 @@ public class OrderServiceImpl implements OrderService {
                     && skin.getVendedor().getEmail().equals(user.getEmail())) {
                 throw new PropietarioSkinException();
             }
-            if (item.getQuantity() > skin.getStock()) {
+            if (skin.getStock() == null || skin.getStock() < 1) {
                 throw new NoStockAvailableException();
             }
 
-            skin.setStock(skin.getStock() - item.getQuantity());
+            skin.setStock(0);
             skinRepository.save(skin);
 
             double finalPrice = skin.getFinalPrice();
 
             OrderDetail detail = new OrderDetail();
             detail.setSkin(skin);
-            detail.setQuantity(item.getQuantity());
+            detail.setQuantity(1);
             detail.setUnitPrice(finalPrice);
             order.addOrderDetail(detail);
 
             OrderDetailResponse detailResponse = new OrderDetailResponse();
             detailResponse.setSkinId(skinId);
             detailResponse.setSkinName(skin.getName());
-            detailResponse.setQuantity(item.getQuantity());
+            detailResponse.setQuantity(1);
             detailResponse.setUnitPrice(finalPrice);
             detailResponse.setLocked(skin.isLocked());
             detailResponse.setLockedUntil(skin.getLockedUntil());
             detailResponse.setSecondsUntilUnlock(skin.getSecondsUntilUnlock());
             detailResponses.add(detailResponse);
 
-            totalPrice += item.getQuantity() * finalPrice;
+            totalPrice += finalPrice;
 
-            ventasARegistrar.add(new Object[]{skin, item.getQuantity(), finalPrice});
+            ventasARegistrar.add(new Object[]{skin, 1, finalPrice});
         }
 
         double descuentoAplicado = 0.0;

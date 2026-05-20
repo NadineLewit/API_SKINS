@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import skinsmarket.demo.controller.order.ExchangeRequest;
+import skinsmarket.demo.controller.order.ExchangeQuoteResponse;
 import skinsmarket.demo.controller.order.OperationStatusResponse;
 import skinsmarket.demo.controller.order.OrderDetailResponse;
 import skinsmarket.demo.controller.order.SaleRequest;
@@ -18,7 +19,6 @@ import skinsmarket.demo.repository.UserRepository;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Implementación del servicio de operaciones (venta / intercambio / cancelación).
@@ -133,69 +133,9 @@ public class TradeOperationServiceImpl implements TradeOperationService {
     @Override
     @Transactional
     public OperationStatusResponse createExchange(String email, ExchangeRequest request) {
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-
-        if (user.getSteamId64() == null || user.getSteamId64().isBlank()) {
-            throw new RuntimeException("Debés configurar tu SteamID64 antes de intercambiar");
-        }
-        if (request.getInventarioItemIds() == null || request.getInventarioItemIds().isEmpty()) {
-            throw new RuntimeException("Tenés que ofrecer al menos una skin propia");
-        }
-        if (request.getSkinIds() == null || request.getSkinIds().isEmpty()) {
-            throw new RuntimeException("Tenés que pedir al menos una skin del marketplace");
-        }
-
-        // Validar items del USER y calcular su valor
-        List<String> userAssetIds = new ArrayList<>();
-        double valorUsuario = 0.0;
-        for (Long invItemId : request.getInventarioItemIds()) {
-            InventarioItem item = inventarioItemRepository.findById(invItemId)
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "Item de inventario no encontrado: " + invItemId));
-            if (!item.getUser().getId().equals(user.getId())) {
-                throw new RuntimeException("El item " + invItemId + " no es tuyo");
-            }
-            if (Boolean.FALSE.equals(item.getTradable())) {
-                throw new RuntimeException(
-                        "El item '" + item.getName() + "' no es tradeable");
-            }
-            if (!orderRepository.findActiveOrdersWithAssetId(item.getAssetId()).isEmpty()) {
-                throw new RuntimeException(
-                        "El item '" + item.getName() + "' está en otra operación activa");
-            }
-            userAssetIds.add(item.getAssetId());
-            valorUsuario += precioPromedioMarketplace(item.getMarketHashName());
-        }
-
-        // Validar skins del marketplace y calcular su valor
-        List<Skin> skinsMarketplace = new ArrayList<>();
-        double valorMarketplace = 0.0;
-        for (Long skinId : request.getSkinIds()) {
-            Skin skin = skinRepository.findById(skinId)
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "Skin no encontrada: " + skinId));
-            if (!skin.getActive()) {
-                throw new RuntimeException("La skin '" + skin.getName() + "' no está disponible");
-            }
-            if (skin.getStock() < 1) {
-                throw new RuntimeException("La skin '" + skin.getName() + "' está sin stock");
-            }
-            if (skin.isLocked()) {
-                throw new RuntimeException(
-                        "La skin '" + skin.getName() + "' está bloqueada hasta " +
-                                skin.getLockedUntil() + " y todavía no se puede intercambiar");
-            }
-            if (skin.getVendedor() != null && skin.getVendedor().getEmail().equals(email)) {
-                throw new RuntimeException(
-                        "No podés intercambiar por una skin que vos mismo publicaste");
-            }
-            skinsMarketplace.add(skin);
-            valorMarketplace += skin.getFinalPrice();
-        }
-
-        double diferencia = valorMarketplace - valorUsuario;
-        double diferenciaAPagar = Math.max(diferencia, 0.0);
+        ExchangeCalculation calc = calcularIntercambio(email, request);
+        User user = calc.user();
+        double diferenciaAPagar = Math.max(calc.diferencia(), 0.0);
 
         // Crear la Order de intercambio
         Order order = new Order();
@@ -204,21 +144,21 @@ public class TradeOperationServiceImpl implements TradeOperationService {
         order.setOperationType(OperationType.EXCHANGE);
         order.setTradeStatus(TradeStatus.WAITING_USER_TRADE);
         order.setPaymentStatus(diferenciaAPagar > 0 ? "PENDING_PAYMENT" : "N/A");
-        order.setTotalPrice(valorMarketplace);
+        order.setTotalPrice(calc.valorMarketplace());
         order.setTotalFinal(diferenciaAPagar);
         order.setDescuentoAplicado(0.0);
-        order.setPriceDifference(diferencia);
-        order.setUserSkinAssetIds(serializeAssetIds(userAssetIds));
+        order.setPriceDifference(calc.diferencia());
+        order.setUserSkinAssetIds(serializeAssetIds(calc.userAssetIds()));
 
         // Agregar las skins del marketplace como detalles (se reservan)
-        for (Skin skin : skinsMarketplace) {
-            skin.setStock(skin.getStock() - 1);  // reserva
+        for (Skin skin : calc.skinsMarketplace()) {
+            skin.setStock(0);  // publicación única reservada
             skinRepository.save(skin);
 
             OrderDetail d = new OrderDetail();
             d.setSkin(skin);
             d.setQuantity(1);
-            d.setUnitPrice(skin.getFinalPrice());
+            d.setUnitPrice(precioPromedioMarketplace(skin));
             order.addOrderDetail(d);
         }
 
@@ -232,11 +172,18 @@ public class TradeOperationServiceImpl implements TradeOperationService {
         bo.direction = "USER_TO_BOT";
         bo.partnerSteamId64 = user.getSteamId64();
         bo.partnerTradeUrl = user.getTradeUrl();
-        bo.assetIds = userAssetIds;
+        bo.assetIds = calc.userAssetIds();
         bo.mockMode = "true";
         botFileService.upsert(bo);
 
         return mapToResponse(order);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ExchangeQuoteResponse quoteExchange(String email, ExchangeRequest request) {
+        ExchangeCalculation calc = calcularIntercambio(email, request);
+        return mapQuote(calc.valorMarketplace(), calc.valorUsuario(), calc.diferencia());
     }
 
     // =========================================================================
@@ -278,7 +225,7 @@ public class TradeOperationServiceImpl implements TradeOperationService {
             for (OrderDetail d : order.getOrderDetails()) {
                 Skin s = d.getSkin();
                 if (s != null) {
-                    s.setStock(s.getStock() + d.getQuantity());
+                    s.setStock(1);
                     skinRepository.save(s);
                 }
             }
@@ -294,6 +241,7 @@ public class TradeOperationServiceImpl implements TradeOperationService {
         if (current == TradeStatus.USER_TRADE_RECEIVED ||
             current == TradeStatus.PREPARING_TRADE) {
 
+            descontarSaldoSiFueAcreditado(order);
             order.setTradeStatus(TradeStatus.RETURN_PENDING);
             orderRepository.save(order);
 
@@ -316,7 +264,7 @@ public class TradeOperationServiceImpl implements TradeOperationService {
             for (OrderDetail d : order.getOrderDetails()) {
                 Skin s = d.getSkin();
                 if (s != null) {
-                    s.setStock(s.getStock() + d.getQuantity());
+                    s.setStock(1);
                     skinRepository.save(s);
                 }
             }
@@ -372,6 +320,7 @@ public class TradeOperationServiceImpl implements TradeOperationService {
                 order.setTradeStatus(TradeStatus.WAITING_DIFFERENCE);
             } else {
                 order.setTradeStatus(TradeStatus.PREPARING_TRADE);
+                acreditarSaldoSiCorresponde(order);
             }
         }
         orderRepository.save(order);
@@ -413,30 +362,167 @@ public class TradeOperationServiceImpl implements TradeOperationService {
     // =========================================================================
 
     /**
-     * Calcula el precio promedio del marketplace para un marketHashName dado.
-     * Si no hay publicaciones activas con esa skin, devuelve PRECIO_DEFAULT_SKIN.
+     * Valida el intercambio y calcula valores usando publicaciones comparables:
+     * misma skin del catálogo, mismo desgaste y mismo StatTrak.
      */
-    private double precioPromedioMarketplace(String marketHashName) {
-        if (marketHashName == null || marketHashName.isBlank()) return PRECIO_DEFAULT_SKIN;
+    private ExchangeCalculation calcularIntercambio(String email, ExchangeRequest request) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
-        // Buscar Skin (publicaciones) cuyo catálogo coincida por nombre
-        List<Skin> publicaciones = skinRepository.findByNameContainingIgnoreCase(
-                stripExterior(marketHashName));
+        if (user.getSteamId64() == null || user.getSteamId64().isBlank()) {
+            throw new RuntimeException("Debés configurar tu SteamID64 antes de intercambiar");
+        }
+        if (request.getInventarioItemIds() == null || request.getInventarioItemIds().isEmpty()) {
+            throw new RuntimeException("Tenés que ofrecer al menos una skin propia");
+        }
+        if (request.getSkinIds() == null || request.getSkinIds().isEmpty()) {
+            throw new RuntimeException("Tenés que pedir al menos una skin del marketplace");
+        }
 
-        publicaciones = publicaciones.stream()
-                .filter(s -> Boolean.TRUE.equals(s.getActive()) && s.getStock() > 0)
-                .toList();
+        List<String> userAssetIds = new ArrayList<>();
+        double valorUsuario = 0.0;
+        for (Long invItemId : request.getInventarioItemIds()) {
+            InventarioItem item = inventarioItemRepository.findById(invItemId)
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Item de inventario no encontrado: " + invItemId));
+            if (!item.getUser().getId().equals(user.getId())) {
+                throw new RuntimeException("El item " + invItemId + " no es tuyo");
+            }
+            if (Boolean.FALSE.equals(item.getTradable())) {
+                throw new RuntimeException("El item '" + item.getName() + "' no es tradeable");
+            }
+            if (Boolean.TRUE.equals(item.getPublicado())) {
+                throw new RuntimeException("El item '" + item.getName() + "' ya está publicado");
+            }
+            if (item.getCatalogo() == null) {
+                throw new RuntimeException("El item '" + item.getName() + "' no está asociado al catálogo y no se puede cotizar");
+            }
+            if (!orderRepository.findActiveOrdersWithAssetId(item.getAssetId()).isEmpty()) {
+                throw new RuntimeException("El item '" + item.getName() + "' está en otra operación activa");
+            }
+            userAssetIds.add(item.getAssetId());
+            valorUsuario += precioPromedioMarketplace(item);
+        }
 
-        if (publicaciones.isEmpty()) return PRECIO_DEFAULT_SKIN;
+        List<Skin> skinsMarketplace = new ArrayList<>();
+        double valorMarketplace = 0.0;
+        for (Long skinId : request.getSkinIds()) {
+            Skin skin = skinRepository.findById(skinId)
+                    .orElseThrow(() -> new IllegalArgumentException("Skin no encontrada: " + skinId));
+            if (!Boolean.TRUE.equals(skin.getActive())) {
+                throw new RuntimeException("La skin '" + skin.getName() + "' no está disponible");
+            }
+            if (skin.getStock() == null || skin.getStock() < 1) {
+                throw new RuntimeException("La skin '" + skin.getName() + "' ya fue reservada o vendida");
+            }
+            if (Boolean.FALSE.equals(skin.getIntercambiable())) {
+                throw new RuntimeException("La skin '" + skin.getName() + "' no está habilitada para intercambio");
+            }
+            if (skin.getCatalogo() == null) {
+                throw new RuntimeException("La skin '" + skin.getName() + "' no está asociada al catálogo y no se puede cotizar");
+            }
+            if (skin.isLocked()) {
+                throw new RuntimeException(
+                        "La skin '" + skin.getName() + "' está bloqueada hasta " +
+                                skin.getLockedUntil() + " y todavía no se puede intercambiar");
+            }
+            if (skin.getVendedor() != null && skin.getVendedor().getEmail().equals(email)) {
+                throw new RuntimeException("No podés intercambiar por una skin que vos mismo publicaste");
+            }
+            skinsMarketplace.add(skin);
+            valorMarketplace += precioPromedioMarketplace(skin);
+        }
 
+        double diferencia = valorMarketplace - valorUsuario;
+        return new ExchangeCalculation(
+                user, userAssetIds, skinsMarketplace, valorMarketplace, valorUsuario, diferencia);
+    }
+
+    /**
+     * Calcula el precio promedio de publicaciones equivalentes. Si no hay
+     * comparables, usa el precio de la publicación puntual como fallback.
+     */
+    private double precioPromedioMarketplace(Skin skin) {
+        if (skin == null) return PRECIO_DEFAULT_SKIN;
+        double fallback = skin.getFinalPrice() != null ? skin.getFinalPrice() : PRECIO_DEFAULT_SKIN;
+        return precioPromedioMarketplace(
+                skin.getCatalogo() != null ? skin.getCatalogo().getId() : null,
+                skin.getExterior(),
+                Boolean.TRUE.equals(skin.getStattrak()),
+                fallback);
+    }
+
+    private double precioPromedioMarketplace(InventarioItem item) {
+        if (item == null) return PRECIO_DEFAULT_SKIN;
+        return precioPromedioMarketplace(
+                item.getCatalogo() != null ? item.getCatalogo().getId() : null,
+                exteriorDesdeMarketHashName(item.getMarketHashName()),
+                esStatTrak(item.getMarketHashName()),
+                PRECIO_DEFAULT_SKIN);
+    }
+
+    private double precioPromedioMarketplace(
+            Long catalogoId, Skin.Exterior exterior, boolean stattrak, double fallback) {
+        List<Skin> publicaciones = skinRepository.findPublicacionesComparables(
+                catalogoId, exterior, stattrak);
+        if (publicaciones.isEmpty()) return fallback;
         double sum = 0;
         for (Skin s : publicaciones) sum += s.getFinalPrice();
         return sum / publicaciones.size();
     }
 
-    private String stripExterior(String name) {
-        int idx = name.indexOf(" (");
-        return idx > 0 ? name.substring(0, idx) : name;
+    private Skin.Exterior exteriorDesdeMarketHashName(String marketHashName) {
+        if (marketHashName == null) return null;
+        if (marketHashName.contains("(Factory New)")) return Skin.Exterior.RECIEN_FABRICADO;
+        if (marketHashName.contains("(Minimal Wear)")) return Skin.Exterior.CASI_NUEVO;
+        if (marketHashName.contains("(Field-Tested)")) return Skin.Exterior.ALGO_DESGASTADO;
+        if (marketHashName.contains("(Well-Worn)")) return Skin.Exterior.BASTANTE_DESGASTADO;
+        if (marketHashName.contains("(Battle-Scarred)")) return Skin.Exterior.DEPLORABLE;
+        return null;
+    }
+
+    private boolean esStatTrak(String marketHashName) {
+        return marketHashName != null && marketHashName.toLowerCase().contains("stattrak");
+    }
+
+    private void acreditarSaldoSiCorresponde(Order order) {
+        if (order.getOperationType() != OperationType.EXCHANGE) return;
+        if (Boolean.TRUE.equals(order.getSaldoAcreditado())) return;
+        if (order.getPriceDifference() == null || order.getPriceDifference() >= 0) return;
+
+        User user = order.getUser();
+        double saldoActual = user.getSaldo() != null ? user.getSaldo() : 0.0;
+        user.setSaldo(saldoActual + Math.abs(order.getPriceDifference()));
+        order.setSaldoAcreditado(true);
+        userRepository.save(user);
+    }
+
+    private void descontarSaldoSiFueAcreditado(Order order) {
+        if (!Boolean.TRUE.equals(order.getSaldoAcreditado())) return;
+        if (order.getPriceDifference() == null || order.getPriceDifference() >= 0) return;
+
+        User user = order.getUser();
+        double saldoActual = user.getSaldo() != null ? user.getSaldo() : 0.0;
+        user.setSaldo(Math.max(0.0, saldoActual - Math.abs(order.getPriceDifference())));
+        order.setSaldoAcreditado(false);
+        userRepository.save(user);
+    }
+
+    private ExchangeQuoteResponse mapQuote(double valorMarketplace, double valorUsuario, double diferencia) {
+        ExchangeQuoteResponse r = new ExchangeQuoteResponse();
+        r.setValorMarketplace(valorMarketplace);
+        r.setValorUsuario(valorUsuario);
+        r.setDiferencia(diferencia);
+        r.setMontoAPagar(Math.max(diferencia, 0.0));
+        r.setSaldoARecibir(Math.max(-diferencia, 0.0));
+        if (diferencia > 0) {
+            r.setResultado("PAGA_DIFERENCIA");
+        } else if (diferencia < 0) {
+            r.setResultado("RECIBE_SALDO");
+        } else {
+            r.setResultado("INTERCAMBIO_DIRECTO");
+        }
+        return r;
     }
 
     private String serializeAssetIds(List<String> ids) {
@@ -454,6 +540,15 @@ public class TradeOperationServiceImpl implements TradeOperationService {
         return mapToResponse(order, mensajePorEstado(order.getTradeStatus()));
     }
 
+    private record ExchangeCalculation(
+            User user,
+            List<String> userAssetIds,
+            List<Skin> skinsMarketplace,
+            double valorMarketplace,
+            double valorUsuario,
+            double diferencia) {
+    }
+
     private OperationStatusResponse mapToResponse(Order order, String mensaje) {
         OperationStatusResponse r = new OperationStatusResponse();
         r.setId(order.getId());
@@ -466,6 +561,10 @@ public class TradeOperationServiceImpl implements TradeOperationService {
         r.setTotalFinal(order.getTotalFinal());
         r.setDescuentoAplicado(order.getDescuentoAplicado());
         r.setPriceDifference(order.getPriceDifference());
+        r.setSaldoARecibir(order.getPriceDifference() != null && order.getPriceDifference() < 0
+                ? Math.abs(order.getPriceDifference())
+                : 0.0);
+        r.setSaldoAcreditado(Boolean.TRUE.equals(order.getSaldoAcreditado()));
         r.setBotTradeOfferId(order.getBotTradeOfferId());
         r.setExpectedAssetIds(order.getExpectedAssetIds());
         r.setUserSkinAssetIds(order.getUserSkinAssetIds());

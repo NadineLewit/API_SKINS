@@ -198,24 +198,22 @@ UPDATE users SET role = 'ADMIN' WHERE email = 'juan@mail.com';
 
 | Método | URL | Token | Descripción |
 |---|---|---|---|
-| GET | `/skins/get/all` | Sin token | Catálogo público (activas con stock) |
+| GET | `/skins/get/all` | Sin token | Publicaciones disponibles |
 | GET | `/skins/get/{id}` | Sin token | Obtener skin por ID |
 | GET | `/skins/get/category?id=1` | Sin token | Filtrar por ID de categoría |
 | GET | `/skins/get/category?name=Rifle` | Sin token | Filtrar por nombre de categoría |
 | GET | `/skins/get/search?name=AK` | Sin token | Buscar por nombre |
 | GET | `/skins/get/price?min=10&max=100` | Sin token | Filtrar por precio |
 | GET | `/skins/admin/all` | ADMIN | Listar todas (incluye inactivas) |
-| POST | `/skins/admin/create-with-image` | ADMIN | Crear skin con imagen |
-| PUT | `/skins/admin/edit/{id}/with-image` | ADMIN | Editar skin con imagen |
-| DELETE | `/skins/admin/delete/{id}` | ADMIN | Baja lógica de skin |
-| POST | `/skins/with-image` | USER | Publicar skin (vendedor) |
+| POST | `/skins/admin/create` | ADMIN | Crear publicación |
+| PUT | `/skins/admin/edit/{id}` | ADMIN | Editar publicación |
+| PUT | `/skins/admin/inactivar/{id}` | ADMIN | Baja lógica de publicación |
+| POST | `/inventario/{itemId}/publicar` | USER | Publicar skin desde inventario |
 | GET | `/skins/mis-skins` | USER | Mis skins publicadas |
-| PUT | `/skins/{id}/with-image` | USER | Editar mi skin |
-| DELETE | `/skins/{id}` | USER | Eliminar mi skin |
+| PUT | `/skins/{id}` | USER | Editar mi skin |
+| PUT | `/skins/{id}/inactivar` | USER | Inactivar mi skin |
 
-> Los endpoints de creación y edición de skins usan **multipart/form-data**:
-> - `skin` → JSON con los datos como texto
-> - `image` → archivo de imagen (obligatorio)
+> Cada publicación representa una skin única. El campo `stock` queda oculto en las respuestas y se usa solo internamente para marcar si la publicación sigue disponible. Para intercambio, el front debe mirar `intercambiable`.
 
 ---
 
@@ -225,11 +223,31 @@ UPDATE users SET role = 'ADMIN' WHERE email = 'juan@mail.com';
 |---|---|---|
 | GET | `/carrito` | Ver mi carrito |
 | PATCH | `/carrito/skins/{skinId}?cantidad=1` | Agregar skin al carrito |
-| PUT | `/carrito/items/{itemId}?cantidad=3` | Modificar cantidad |
+| PUT | `/carrito/items/{itemId}?cantidad=1` | Mantener cantidad única |
 | DELETE | `/carrito/items/{itemId}` | Eliminar item |
 | DELETE | `/carrito` | Vaciar carrito |
 
-> La cantidad va como **query param en la URL**, sin body.
+> La cantidad siempre debe ser `1`: no existe compra por cantidad porque cada skin publicada es única.
+
+---
+
+### 🔁 Intercambios — token USER
+
+| Método | URL | Descripción |
+|---|---|---|
+| POST | `/operations/exchange/quote` | Cotizar intercambio sin reservar |
+| POST | `/operations/exchange` | Crear orden de intercambio |
+| GET | `/operations/{id}/status` | Ver estado |
+
+La cotización y la orden reciben:
+```json
+{
+  "inventarioItemIds": [10],
+  "skinIds": [25]
+}
+```
+
+El backend calcula valores por precio promedio de publicaciones comparables: misma skin del catálogo, mismo desgaste (`exterior`) y mismo StatTrak. Si `diferencia > 0`, el usuario paga esa diferencia por Mercado Pago. Si `diferencia < 0`, se acredita saldo interno al usuario cuando el bot recibe sus skins.
 
 ---
 

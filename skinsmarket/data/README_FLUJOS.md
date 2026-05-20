@@ -75,12 +75,14 @@ Cada `Order` tiene 3 dimensiones de estado:
 ### Flujo
 1. USER selecciona N skins propias + M skins del marketplace → POST /operations/exchange
 2. Sistema calcula `valor_marketplace - valor_usuario`:
-   - `valor_marketplace` = sum(Skin.finalPrice)
-   - `valor_usuario` = sum(precioPromedioMarketplace para esa skin)
+   - `valor_marketplace` = sum(precioPromedioMarketplace por skin pedida)
+   - `valor_usuario` = sum(precioPromedioMarketplace por skin ofrecida)
+   - el promedio agrupa misma skin del catálogo + mismo desgaste + mismo StatTrak
 3. tradeStatus=`WAITING_USER_TRADE`, paymentStatus depende de la diferencia
 4. USER manda sus skins → bot recibe → `USER_TRADE_RECEIVED`
 5. Si diferencia > 0 → `WAITING_DIFFERENCE` → USER paga MP → `PREPARING_TRADE`
-   Si diferencia ≤ 0 → directo a `PREPARING_TRADE` (saldo interno)
+   Si diferencia = 0 → directo a `PREPARING_TRADE`
+   Si diferencia < 0 → se acredita saldo interno y pasa a `PREPARING_TRADE`
 6. Bot envía skins del marketplace → `BOT_SENT` → `COMPLETED`
 
 ### Archivos involucrados

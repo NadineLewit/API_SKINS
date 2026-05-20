@@ -30,6 +30,7 @@ public class SkinRequest {
     private String imageUrl;
 
     private Integer stock;
+    private Boolean intercambiable;
     private String rareza;
     private String exterior;
     private Boolean stattrak;

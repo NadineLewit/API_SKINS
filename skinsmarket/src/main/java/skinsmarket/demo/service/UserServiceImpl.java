@@ -186,6 +186,7 @@ public class UserServiceImpl implements UserService {
             resp.setEmail(user.getEmail());
             resp.setFirstName(user.getFirstName());
             resp.setLastName(user.getLastName());
+            resp.setSaldo(user.getSaldo());
             resp.setRole(user.getRole());
             usersResponse.add(resp);
         }
@@ -199,6 +200,7 @@ public class UserServiceImpl implements UserService {
         r.setEmailVerified(user.getEmailVerified());
         r.setFirstName(user.getFirstName());
         r.setLastName(user.getLastName());
+        r.setSaldo(user.getSaldo());
         r.setSteamId64(user.getSteamId64());
         r.setTradeUrl(user.getTradeUrl());
         return r;

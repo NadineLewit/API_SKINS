@@ -120,6 +120,9 @@ public class Order {
     @Column(name = "price_difference")
     private Double priceDifference;
 
+    @Column(name = "saldo_acreditado", nullable = false, columnDefinition = "BOOLEAN DEFAULT FALSE")
+    private Boolean saldoAcreditado = false;
+
     /**
      * Cuando esta order es una RETURN, apunta al ID de la orden original
      * que se canceló. Permite trackear "esta devolución corresponde a la venta #123".

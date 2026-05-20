@@ -58,16 +58,15 @@ public class CarritoServiceImpl implements CarritoService {
     /**
      * Agrega una skin al carrito del usuario.
      *
-     * Si la skin ya está en el carrito, suma la cantidad solicitada al ítem existente.
-     * Si no está, crea un nuevo ítem con la skin y la cantidad indicada.
+     * Cada publicación es una skin única: no se manejan cantidades mayores a 1.
      *
      * Valida que la skin esté activa y tenga stock suficiente antes de agregar.
      */
     @Override
     @Transactional
     public Carrito agregarSkin(String email, Long skinId, Integer cantidad) {
-        if (cantidad <= 0) {
-            throw new RuntimeException("La cantidad debe ser mayor a 0");
+        if (cantidad != null && cantidad != 1) {
+            throw new RuntimeException("Cada skin publicada es única. La cantidad debe ser 1");
         }
 
         // Buscar y validar la skin
@@ -77,40 +76,26 @@ public class CarritoServiceImpl implements CarritoService {
         if (!skin.getActive()) {
             throw new RuntimeException("La skin no está disponible");
         }
-        if (skin.getStock() < cantidad) {
-            throw new RuntimeException("Stock insuficiente para la cantidad solicitada");
+        if (skin.getStock() == null || skin.getStock() < 1) {
+            throw new RuntimeException("La skin ya fue reservada o vendida");
         }
 
         Carrito carrito = obtenerOCrearCarrito(email);
 
-        // Buscar si la skin ya está en el carrito para sumar cantidad (evitar duplicados)
-        ItemCarrito item = carrito.getItems().stream()
+        boolean yaEstaEnCarrito = carrito.getItems().stream()
                 .filter(i -> i.getSkin().getId().equals(skinId))
                 .findFirst()
-                .orElseGet(() -> {
-                    // La skin no estaba en el carrito: crear nuevo ítem
-                    ItemCarrito nuevo = new ItemCarrito();
-                    nuevo.setCarrito(carrito);
-                    nuevo.setSkin(skin);
-                    nuevo.setCantidad(0);
-                    nuevo.setPrecioUnitario(skin.getFinalPrice()); // precio con descuento aplicado
-                    carrito.getItems().add(nuevo);
-                    return nuevo;
-                });
-
-        // Validar la cantidad ACUMULADA (existente + nueva) contra el stock disponible.
-        // BUG sin esto: ítem tiene 3, usuario agrega 5, stock=6 → 3+5=8 > 6 pero pasaba.
-        int cantidadTotal = item.getCantidad() + cantidad;
-        if (cantidadTotal > skin.getStock()) {
-            throw new RuntimeException(
-                    "Stock insuficiente. En tu carrito ya tenés " + item.getCantidad()
-                            + ", querés agregar " + cantidad
-                            + " pero el stock disponible es " + skin.getStock()
-            );
+                .isPresent();
+        if (yaEstaEnCarrito) {
+            throw new RuntimeException("Esa skin ya está en tu carrito");
         }
 
-        // Sumar la cantidad solicitada al ítem (nuevo o existente)
-        item.setCantidad(cantidadTotal);
+        ItemCarrito item = new ItemCarrito();
+        item.setCarrito(carrito);
+        item.setSkin(skin);
+        item.setCantidad(1);
+        item.setPrecioUnitario(skin.getFinalPrice());
+        carrito.getItems().add(item);
 
         // Actualizar estado del carrito a ACTIVO
         carrito.setEstado(Carrito.Estado.ACTIVO);
@@ -126,8 +111,8 @@ public class CarritoServiceImpl implements CarritoService {
     @Override
     @Transactional
     public Carrito modificarCantidad(String email, Long itemId, Integer cantidad) {
-        if (cantidad <= 0) {
-            throw new RuntimeException("La cantidad debe ser mayor a 0");
+        if (cantidad == null || cantidad != 1) {
+            throw new RuntimeException("Cada skin publicada es única. La cantidad debe ser 1");
         }
 
         Carrito carrito = obtenerOCrearCarrito(email);
@@ -137,14 +122,9 @@ public class CarritoServiceImpl implements CarritoService {
                 .findFirst()
                 .orElseThrow(() -> new RuntimeException("Ítem no encontrado en el carrito"));
 
-        // Validar que la nueva cantidad no supere el stock disponible de la skin.
-        // Sin esta validación, el usuario podría poner cantidad=999 aunque haya solo 2 en stock,
-        // y el error recién aparecería al intentar crear la orden (confundiendo al usuario).
         Skin skin = item.getSkin();
-        if (cantidad > skin.getStock()) {
-            throw new RuntimeException(
-                    "Stock insuficiente. Disponible: " + skin.getStock() + ", solicitado: " + cantidad
-            );
+        if (skin.getStock() == null || skin.getStock() < 1) {
+            throw new RuntimeException("La skin ya fue reservada o vendida");
         }
 
         item.setCantidad(cantidad);

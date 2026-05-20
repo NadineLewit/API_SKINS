@@ -342,8 +342,10 @@ public class InventarioServiceImpl implements InventarioService {
         skin.setPrice(request.getPrice());
         skin.setDiscount(request.getDiscount() != null ? request.getDiscount() : 0.0);
         skin.setStock(1);
+        skin.setIntercambiable(request.getIntercambiable() == null || Boolean.TRUE.equals(request.getIntercambiable()));
         skin.setActive(true);
-        skin.setStattrak(false);
+        skin.setStattrak(esStatTrak(item.getMarketHashName()));
+        skin.setExterior(exteriorDesdeMarketHashName(item.getMarketHashName()));
         skin.setFechaAlta(ahora);
         skin.setVendedor(user);
         skin.setCatalogo(cat);
@@ -358,6 +360,20 @@ public class InventarioServiceImpl implements InventarioService {
         inventarioItemRepository.save(item);
 
         return saved;
+    }
+
+    private Skin.Exterior exteriorDesdeMarketHashName(String marketHashName) {
+        if (marketHashName == null) return null;
+        if (marketHashName.contains("(Factory New)")) return Skin.Exterior.RECIEN_FABRICADO;
+        if (marketHashName.contains("(Minimal Wear)")) return Skin.Exterior.CASI_NUEVO;
+        if (marketHashName.contains("(Field-Tested)")) return Skin.Exterior.ALGO_DESGASTADO;
+        if (marketHashName.contains("(Well-Worn)")) return Skin.Exterior.BASTANTE_DESGASTADO;
+        if (marketHashName.contains("(Battle-Scarred)")) return Skin.Exterior.DEPLORABLE;
+        return null;
+    }
+
+    private boolean esStatTrak(String marketHashName) {
+        return marketHashName != null && marketHashName.toLowerCase().contains("stattrak");
     }
 
     // DTOs internos

@@ -20,4 +20,7 @@ public class PublicarDesdeInventarioRequest {
 
     /** Descuento opcional (0.0 a 1.0). Default 0. */
     private Double discount;
+
+    /** Si esta publicación acepta intercambio. Default true. */
+    private Boolean intercambiable;
 }

@@ -26,6 +26,9 @@ public class UserResponse {
     // Apellido del usuario
     private String lastName;
 
+    // Saldo a favor generado por intercambios donde el usuario entrega más valor
+    private Double saldo;
+
     // SteamID64 (puede ser null si el usuario no lo configuró)
     private String steamId64;
 

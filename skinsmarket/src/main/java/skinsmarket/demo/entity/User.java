@@ -44,6 +44,10 @@ public class User implements UserDetails {
     @Column(nullable = false)
     private String lastName;
 
+    @Builder.Default
+    @Column(nullable = false, columnDefinition = "DOUBLE DEFAULT 0")
+    private Double saldo = 0.0;
+
     /**
      * Fecha y hora del último cambio de username.
      * Null si nunca se cambió (se registró con ese username y no lo modificó).

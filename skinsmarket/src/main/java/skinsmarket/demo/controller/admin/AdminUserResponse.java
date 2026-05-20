@@ -28,6 +28,9 @@ public class AdminUserResponse {
     // Apellido del usuario
     private String lastName;
 
+    // Saldo interno a favor del usuario
+    private Double saldo;
+
     // Rol actual del usuario en el sistema (USER o ADMIN)
     // Se usa el enum Role directamente para mantener consistencia con la entidad
     private Role role;

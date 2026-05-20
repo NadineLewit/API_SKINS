@@ -12,6 +12,7 @@ import skinsmarket.demo.entity.OrderDetail;
 import skinsmarket.demo.entity.TradeStatus;
 import skinsmarket.demo.repository.InventarioItemRepository;
 import skinsmarket.demo.repository.OrderRepository;
+import skinsmarket.demo.repository.UserRepository;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -56,6 +57,7 @@ public class MockTradeScheduler {
 
     @Autowired private OrderRepository orderRepository;
     @Autowired private InventarioItemRepository inventarioItemRepository;
+    @Autowired private UserRepository userRepository;
     @Autowired private BotTradeOrdersFileService botFileService;
 
     /**
@@ -137,6 +139,7 @@ public class MockTradeScheduler {
                 avanzarA(order, next,
                         "Mock: USER habría enviado skins, bot las recibió");
                 marcarItemsComoBloqueados(order);
+                acreditarSaldoSiCorresponde(order);
             }
             return;
         }
@@ -252,6 +255,19 @@ public class MockTradeScheduler {
         } catch (Exception e) {
             System.err.println("[MOCK] No se pudieron bloquear items: " + e.getMessage());
         }
+    }
+
+    private void acreditarSaldoSiCorresponde(Order order) {
+        if (order.getOperationType() != OperationType.EXCHANGE) return;
+        if (Boolean.TRUE.equals(order.getSaldoAcreditado())) return;
+        if (order.getPriceDifference() == null || order.getPriceDifference() >= 0) return;
+
+        var user = order.getUser();
+        double saldoActual = user.getSaldo() != null ? user.getSaldo() : 0.0;
+        user.setSaldo(saldoActual + Math.abs(order.getPriceDifference()));
+        order.setSaldoAcreditado(true);
+        userRepository.save(user);
+        orderRepository.save(order);
     }
 
     private long secondsSince(LocalDateTime when) {

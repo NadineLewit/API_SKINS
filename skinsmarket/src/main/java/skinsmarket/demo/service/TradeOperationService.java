@@ -1,6 +1,7 @@
 package skinsmarket.demo.service;
 
 import skinsmarket.demo.controller.order.ExchangeRequest;
+import skinsmarket.demo.controller.order.ExchangeQuoteResponse;
 import skinsmarket.demo.controller.order.OperationStatusResponse;
 import skinsmarket.demo.controller.order.SaleRequest;
 
@@ -23,6 +24,9 @@ public interface TradeOperationService {
 
     /** Crea una orden de intercambio. */
     OperationStatusResponse createExchange(String email, ExchangeRequest request);
+
+    /** Cotiza un intercambio sin reservar skins ni crear orden. */
+    ExchangeQuoteResponse quoteExchange(String email, ExchangeRequest request);
 
     /** Cancela una operación. Si el USER ya entregó skins, genera una RETURN. */
     OperationStatusResponse cancelOperation(String email, Long orderId);

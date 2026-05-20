@@ -23,6 +23,8 @@ public class OperationStatusResponse {
     private Double totalFinal;
     private Double descuentoAplicado;
     private Double priceDifference;
+    private Double saldoARecibir;
+    private Boolean saldoAcreditado;
 
     private String botTradeOfferId;
     private String expectedAssetIds;

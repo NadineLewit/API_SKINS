@@ -1,6 +1,8 @@
 package skinsmarket.demo.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import skinsmarket.demo.entity.Skin;
 import skinsmarket.demo.entity.User;
@@ -56,4 +58,18 @@ public interface SkinRepository extends JpaRepository<Skin, Long> {
 
     List<Skin> findByPriceGreaterThanEqualAndActiveTrueAndStockGreaterThan(
             Double min, Integer stock);
+
+    @Query("""
+            SELECT s
+            FROM Skin s
+            WHERE s.active = true
+              AND s.stock > 0
+              AND (:catalogoId IS NULL OR s.catalogo.id = :catalogoId)
+              AND ((:exterior IS NULL AND s.exterior IS NULL) OR s.exterior = :exterior)
+              AND s.stattrak = :stattrak
+            """)
+    List<Skin> findPublicacionesComparables(
+            @Param("catalogoId") Long catalogoId,
+            @Param("exterior") Skin.Exterior exterior,
+            @Param("stattrak") Boolean stattrak);
 }

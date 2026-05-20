@@ -55,6 +55,19 @@ public class OperationController {
         }
     }
 
+    /** POST /operations/exchange/quote — cotiza el intercambio sin crear orden. */
+    @PostMapping("/exchange/quote")
+    public ResponseEntity<?> quoteExchange(Authentication auth, @RequestBody ExchangeRequest request) {
+        try {
+            ExchangeQuoteResponse r = tradeService.quoteExchange(auth.getName(), request);
+            return ResponseEntity.ok(ApiResponse.of("Cotización del intercambio", r));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(ApiResponse.of(e.getMessage()));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.of(e.getMessage()));
+        }
+    }
+
     /**
      * POST /operations/{id}/cancel — cancela una operación.
      * Si el USER ya entregó skins, genera automáticamente una devolución.

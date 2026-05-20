@@ -37,10 +37,14 @@ public class Skin {
     private Double discount = 0.0;
 
     @Column(nullable = false)
+    @JsonIgnore
     private Integer stock;
 
     @Column(nullable = false)
     private Boolean active = true;
+
+    @Column(nullable = false, columnDefinition = "BOOLEAN DEFAULT TRUE")
+    private Boolean intercambiable = true;
 
     @Column(nullable = false)
     private String game;

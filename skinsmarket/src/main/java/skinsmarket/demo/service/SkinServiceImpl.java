@@ -166,7 +166,8 @@ public class SkinServiceImpl implements SkinService {
         Skin skin = new Skin();
         skin.setPrice(req.getPrice());
         skin.setDiscount(discount);
-        skin.setStock(req.getStock());
+        skin.setStock(1);
+        skin.setIntercambiable(req.getIntercambiable() == null || Boolean.TRUE.equals(req.getIntercambiable()));
         skin.setActive(true);
         skin.setFechaAlta(LocalDateTime.now());
         skin.setVendedor(vendedor);
@@ -207,7 +208,6 @@ public class SkinServiceImpl implements SkinService {
 
     private void validarDatos(SkinRequest req)
             throws NegativeStockException, NegativePriceException, InvalidDiscountException {
-        if (!InfoValidator.isValidStock(req.getStock())) throw new NegativeStockException();
         if (!InfoValidator.isValidPrice(req.getPrice())) throw new NegativePriceException();
         double d = req.getDiscount() != null ? req.getDiscount() : 0.0;
         if (!InfoValidator.isValidDiscount(d)) throw new InvalidDiscountException();
@@ -237,7 +237,9 @@ public class SkinServiceImpl implements SkinService {
 
         skin.setPrice(req.getPrice());
         skin.setDiscount(discount);
-        skin.setStock(req.getStock());
+        if (req.getIntercambiable() != null) {
+            skin.setIntercambiable(req.getIntercambiable());
+        }
 
         if (req.getRareza() != null && !req.getRareza().isBlank()) {
             skin.setRareza(Skin.Rareza.valueOf(req.getRareza().toUpperCase()));
