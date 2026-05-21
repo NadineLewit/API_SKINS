@@ -102,8 +102,10 @@ public class SkinController {
     }
 
     @GetMapping("/get/all")
-    public ResponseEntity<?> getAllAvailableSkins() {
-        List<Skin> skins = skinService.getAllAvailableSkins();
+    public ResponseEntity<?> getAllAvailableSkins(
+            @RequestParam(required = false) Boolean intercambiable,
+            @RequestParam(required = false) Boolean vendible) {
+        List<Skin> skins = skinService.getAllAvailableSkins(intercambiable, vendible);
         return ResponseEntity.ok(
                 ApiResponse.of("Catálogo de skins disponibles (" + skins.size() + ")", skins));
     }

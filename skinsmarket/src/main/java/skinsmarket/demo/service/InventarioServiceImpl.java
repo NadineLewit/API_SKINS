@@ -330,6 +330,7 @@ public class InventarioServiceImpl implements InventarioService {
         if (request.getPrice() == null || request.getPrice() <= 0) {
             throw new RuntimeException("El precio debe ser mayor a 0");
         }
+        validarIntercambiableOVendible(request.getIntercambiable(), request.getVendible());
 
         SkinCatalogo cat = item.getCatalogo();
         LocalDateTime ahora = LocalDateTime.now();
@@ -342,7 +343,8 @@ public class InventarioServiceImpl implements InventarioService {
         skin.setPrice(request.getPrice());
         skin.setDiscount(request.getDiscount() != null ? request.getDiscount() : 0.0);
         skin.setStock(1);
-        skin.setIntercambiable(request.getIntercambiable() == null || Boolean.TRUE.equals(request.getIntercambiable()));
+        skin.setIntercambiable(valorDefaultTrue(request.getIntercambiable()));
+        skin.setVendible(valorDefaultTrue(request.getVendible()));
         skin.setActive(true);
         skin.setStattrak(esStatTrak(item.getMarketHashName()));
         skin.setExterior(exteriorDesdeMarketHashName(item.getMarketHashName()));
@@ -360,6 +362,16 @@ public class InventarioServiceImpl implements InventarioService {
         inventarioItemRepository.save(item);
 
         return saved;
+    }
+
+    private void validarIntercambiableOVendible(Boolean intercambiable, Boolean vendible) {
+        if (!valorDefaultTrue(intercambiable) && !valorDefaultTrue(vendible)) {
+            throw new RuntimeException("La skin debe ser intercambiable, vendible o ambas.");
+        }
+    }
+
+    private boolean valorDefaultTrue(Boolean value) {
+        return value == null || Boolean.TRUE.equals(value);
     }
 
     private Skin.Exterior exteriorDesdeMarketHashName(String marketHashName) {

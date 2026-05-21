@@ -23,4 +23,7 @@ public class PublicarDesdeInventarioRequest {
 
     /** Si esta publicación acepta intercambio. Default true. */
     private Boolean intercambiable;
+
+    /** Si esta publicación se puede comprar por carrito/Mercado Pago. Default true. */
+    private Boolean vendible;
 }

@@ -353,6 +353,27 @@ collection:
             send: true
             store: true
           rebuildPath: true
+      - url: "{{ base_url }}/catalogo/admin/market-stats?page=0&size=20"
+        name: "[ADMIN] Catálogo con stock/precio promedio"
+        meta:
+          id: req_cat_admin_market_stats
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔴 ADMIN — Stock agregado calculado desde publicaciones disponibles; no es stock de una publicación individual."
+          sortKey: -1778200000027.5
+        method: GET
+        headers:
+          - name: Authorization
+            value: Bearer {{ token_admin }}
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
       - url: "{{ base_url }}/catalogo/sincronizar"
         name: "[ADMIN] Re-sincronizar TODAS las skins"
         meta:
@@ -508,7 +529,9 @@ collection:
           text: |-
             {
               "price": 25.50,
-              "discount": 0.0
+              "discount": 0.0,
+              "intercambiable": true,
+              "vendible": true
             }
         headers:
           - name: Content-Type
@@ -538,8 +561,26 @@ collection:
           created: 1778200000000
           modified: 1778200000000
           isPrivate: false
-          description: "🔓 active=true con stock>0"
+          description: "🔓 Publicaciones disponibles. Stock no se expone: cada skin es única."
           sortKey: -1778200000041
+        method: GET
+        settings:
+          renderRequestBody: true
+          encodeUrl: true
+          followRedirects: global
+          cookies:
+            send: true
+            store: true
+          rebuildPath: true
+      - url: "{{ base_url }}/skins/get/all?intercambiable=true&vendible=false"
+        name: "[SIN TOKEN] Filtrar intercambiable/vendible"
+        meta:
+          id: req_skins_filter_trade_sale
+          created: 1778200000000
+          modified: 1778200000000
+          isPrivate: false
+          description: "🔓 Usá intercambiable=true/false y vendible=true/false según el listado que necesite el front"
+          sortKey: -1778200000041.5
         method: GET
         settings:
           renderRequestBody: true
@@ -658,8 +699,9 @@ collection:
             {
               "catalogoId": 1,
               "price": 25.99,
-              "stock": 5,
               "discount": 0.0,
+              "intercambiable": true,
+              "vendible": true,
               "rareza": "ROSA",
               "exterior": "ALGO_DESGASTADO",
               "stattrak": false
@@ -692,8 +734,9 @@ collection:
           text: |-
             {
               "price": 29.99,
-              "stock": 8,
               "discount": 0.1,
+              "intercambiable": true,
+              "vendible": false,
               "rareza": "ROSA",
               "exterior": "CASI_NUEVO",
               "stattrak": false
@@ -760,7 +803,7 @@ collection:
           created: 1778200000000
           modified: 1778200000000
           isPrivate: false
-          description: "🔵 Vendedor edita precio/stock/descuento de su publicación"
+          description: "🔵 Vendedor edita precio/descuento y si acepta compra directa/intercambio"
           sortKey: -1778200000051
         method: PUT
         body:
@@ -768,8 +811,9 @@ collection:
           text: |-
             {
               "price": 22.50,
-              "stock": 1,
-              "discount": 0.05
+              "discount": 0.05,
+              "intercambiable": true,
+              "vendible": true
             }
         headers:
           - name: Content-Type

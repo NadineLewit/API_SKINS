@@ -108,6 +108,9 @@ public class OrderServiceImpl implements OrderService {
             if (!skin.getActive()) {
                 throw new RuntimeException("La skin '" + skin.getName() + "' ya no está disponible");
             }
+            if (Boolean.FALSE.equals(skin.getVendible())) {
+                throw new RuntimeException("La skin '" + skin.getName() + "' no está habilitada para compra directa");
+            }
             if (skin.getVendedor() != null
                     && skin.getVendedor().getEmail().equals(user.getEmail())) {
                 throw new PropietarioSkinException();

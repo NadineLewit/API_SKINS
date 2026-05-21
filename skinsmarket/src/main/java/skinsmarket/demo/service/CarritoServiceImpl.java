@@ -76,6 +76,9 @@ public class CarritoServiceImpl implements CarritoService {
         if (!skin.getActive()) {
             throw new RuntimeException("La skin no está disponible");
         }
+        if (Boolean.FALSE.equals(skin.getVendible())) {
+            throw new RuntimeException("La skin no está habilitada para compra directa");
+        }
         if (skin.getStock() == null || skin.getStock() < 1) {
             throw new RuntimeException("La skin ya fue reservada o vendida");
         }
@@ -123,6 +126,9 @@ public class CarritoServiceImpl implements CarritoService {
                 .orElseThrow(() -> new RuntimeException("Ítem no encontrado en el carrito"));
 
         Skin skin = item.getSkin();
+        if (Boolean.FALSE.equals(skin.getVendible())) {
+            throw new RuntimeException("La skin no está habilitada para compra directa");
+        }
         if (skin.getStock() == null || skin.getStock() < 1) {
             throw new RuntimeException("La skin ya fue reservada o vendida");
         }

@@ -72,8 +72,11 @@ public class SkinServiceImpl implements SkinService {
     }
 
     @Override
-    public List<Skin> getAllAvailableSkins() {
-        return skinRepository.findByActiveTrueAndStockGreaterThan(STOCK_DISPONIBLE_MINIMO);
+    public List<Skin> getAllAvailableSkins(Boolean intercambiable, Boolean vendible) {
+        return aplicarFiltrosOperacion(
+                skinRepository.findByActiveTrueAndStockGreaterThan(STOCK_DISPONIBLE_MINIMO),
+                intercambiable,
+                vendible);
     }
 
     @Override
@@ -167,7 +170,8 @@ public class SkinServiceImpl implements SkinService {
         skin.setPrice(req.getPrice());
         skin.setDiscount(discount);
         skin.setStock(1);
-        skin.setIntercambiable(req.getIntercambiable() == null || Boolean.TRUE.equals(req.getIntercambiable()));
+        skin.setIntercambiable(valorDefaultTrue(req.getIntercambiable()));
+        skin.setVendible(valorDefaultTrue(req.getVendible()));
         skin.setActive(true);
         skin.setFechaAlta(LocalDateTime.now());
         skin.setVendedor(vendedor);
@@ -211,6 +215,13 @@ public class SkinServiceImpl implements SkinService {
         if (!InfoValidator.isValidPrice(req.getPrice())) throw new NegativePriceException();
         double d = req.getDiscount() != null ? req.getDiscount() : 0.0;
         if (!InfoValidator.isValidDiscount(d)) throw new InvalidDiscountException();
+        if (req.getIntercambiable() != null || req.getVendible() != null) {
+            boolean intercambiable = valorDefaultTrue(req.getIntercambiable());
+            boolean vendible = valorDefaultTrue(req.getVendible());
+            if (!intercambiable && !vendible) {
+                throw new RuntimeException("La skin debe ser intercambiable, vendible o ambas.");
+            }
+        }
     }
 
     private SkinCatalogo resolverCatalogo(SkinRequest req) {
@@ -240,6 +251,12 @@ public class SkinServiceImpl implements SkinService {
         if (req.getIntercambiable() != null) {
             skin.setIntercambiable(req.getIntercambiable());
         }
+        if (req.getVendible() != null) {
+            skin.setVendible(req.getVendible());
+        }
+        if (!Boolean.TRUE.equals(skin.getIntercambiable()) && !Boolean.TRUE.equals(skin.getVendible())) {
+            throw new RuntimeException("La skin debe ser intercambiable, vendible o ambas.");
+        }
 
         if (req.getRareza() != null && !req.getRareza().isBlank()) {
             skin.setRareza(Skin.Rareza.valueOf(req.getRareza().toUpperCase()));
@@ -250,5 +267,17 @@ public class SkinServiceImpl implements SkinService {
         if (req.getStattrak() != null) {
             skin.setStattrak(req.getStattrak());
         }
+    }
+
+    private boolean valorDefaultTrue(Boolean value) {
+        return value == null || Boolean.TRUE.equals(value);
+    }
+
+    private List<Skin> aplicarFiltrosOperacion(
+            List<Skin> skins, Boolean intercambiable, Boolean vendible) {
+        return skins.stream()
+                .filter(s -> intercambiable == null || Boolean.TRUE.equals(s.getIntercambiable()) == intercambiable)
+                .filter(s -> vendible == null || Boolean.TRUE.equals(s.getVendible()) == vendible)
+                .toList();
     }
 }

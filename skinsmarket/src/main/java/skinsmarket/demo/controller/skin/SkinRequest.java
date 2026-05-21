@@ -31,6 +31,7 @@ public class SkinRequest {
 
     private Integer stock;
     private Boolean intercambiable;
+    private Boolean vendible;
     private String rareza;
     private String exterior;
     private Boolean stattrak;

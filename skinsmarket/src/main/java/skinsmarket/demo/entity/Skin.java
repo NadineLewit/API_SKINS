@@ -46,6 +46,9 @@ public class Skin {
     @Column(nullable = false, columnDefinition = "BOOLEAN DEFAULT TRUE")
     private Boolean intercambiable = true;
 
+    @Column(nullable = false, columnDefinition = "BOOLEAN DEFAULT TRUE")
+    private Boolean vendible = true;
+
     @Column(nullable = false)
     private String game;
 

@@ -54,6 +54,7 @@ public class SecurityConfig {
                 .requestMatchers(org.springframework.http.HttpMethod.POST, "/payments/webhook").permitAll()
 
                 // ── Catálogo: GET público, escritura solo ADMIN ─────────────────
+                .requestMatchers("/catalogo/admin/**").hasAnyAuthority(Role.ADMIN.name())
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/catalogo").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.GET, "/catalogo/**").permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,   "/catalogo/**").hasAnyAuthority(Role.ADMIN.name())

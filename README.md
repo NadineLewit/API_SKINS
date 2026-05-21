@@ -198,7 +198,8 @@ UPDATE users SET role = 'ADMIN' WHERE email = 'juan@mail.com';
 
 | Método | URL | Token | Descripción |
 |---|---|---|---|
-| GET | `/skins/get/all` | Sin token | Publicaciones disponibles |
+| GET | `/catalogo/admin/market-stats?page=0&size=50` | ADMIN | Catálogo completo con stock/precio promedio calculado desde publicaciones disponibles |
+| GET | `/skins/get/all` | Sin token | Publicaciones disponibles. Acepta `?intercambiable=true/false&vendible=true/false` |
 | GET | `/skins/get/{id}` | Sin token | Obtener skin por ID |
 | GET | `/skins/get/category?id=1` | Sin token | Filtrar por ID de categoría |
 | GET | `/skins/get/category?name=Rifle` | Sin token | Filtrar por nombre de categoría |
@@ -213,7 +214,7 @@ UPDATE users SET role = 'ADMIN' WHERE email = 'juan@mail.com';
 | PUT | `/skins/{id}` | USER | Editar mi skin |
 | PUT | `/skins/{id}/inactivar` | USER | Inactivar mi skin |
 
-> Cada publicación representa una skin única. El campo `stock` queda oculto en las respuestas y se usa solo internamente para marcar si la publicación sigue disponible. Para intercambio, el front debe mirar `intercambiable`.
+> Cada publicación representa una skin única. El campo `stock` de publicación queda oculto. El `stock` visible solo existe en `/catalogo/admin/market-stats` y significa cantidad de publicaciones disponibles para esa skin/desgaste.
 
 ---
 

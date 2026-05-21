@@ -34,7 +34,7 @@ public interface SkinService {
 
     List<Skin> getAllSkins(boolean includeInactive);
 
-    List<Skin> getAllAvailableSkins();
+    List<Skin> getAllAvailableSkins(Boolean intercambiable, Boolean vendible);
 
     /**
      * Filtra skins por nombre de categoría (rifle, pistol, knife, smg, etc).

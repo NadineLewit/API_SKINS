@@ -27,6 +27,9 @@ public interface SkinRepository extends JpaRepository<Skin, Long> {
 
     List<Skin> findByActiveTrueAndStockGreaterThan(Integer stock);
 
+    List<Skin> findByCatalogo_IdInAndActiveTrueAndStockGreaterThan(
+            List<Long> catalogoIds, Integer stock);
+
     List<Skin> findByVendedor(User vendedor);
 
     List<Skin> findByNameContainingIgnoreCase(String name);

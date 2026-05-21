@@ -7,13 +7,17 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import skinsmarket.demo.controller.common.ApiResponse;
+import skinsmarket.demo.entity.Skin;
 import skinsmarket.demo.entity.SkinCatalogo;
 import skinsmarket.demo.repository.SkinCatalogoRepository;
+import skinsmarket.demo.repository.SkinRepository;
 import skinsmarket.demo.service.SkinCatalogoService;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Controlador del catálogo maestro de skins.
@@ -33,6 +37,9 @@ public class SkinCatalogoController {
 
     @Autowired
     private SkinCatalogoRepository skinCatalogoRepository;
+
+    @Autowired
+    private SkinRepository skinRepository;
 
     /**
      * GET /catalogo?page=0&size=50
@@ -74,6 +81,55 @@ public class SkinCatalogoController {
         Map<String, Object> info = new HashMap<>();
         info.put("totalSkinsEnCatalogo", total);
         return ResponseEntity.ok(ApiResponse.of("Conteo del catálogo", info));
+    }
+
+    /**
+     * GET /catalogo/admin/market-stats?page=0&size=50
+     *
+     * Vista ADMIN del catálogo con stock/precios calculados desde publicaciones
+     * disponibles. El stock NO pertenece a cada publicación visible al usuario:
+     * acá representa cuántas publicaciones activas y disponibles existen para
+     * ese item del catálogo.
+     */
+    @GetMapping("/admin/market-stats")
+    public ResponseEntity<?> marketStatsAdmin(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size) {
+
+        if (size > 500) size = 500;
+        if (size < 1) size = 50;
+        if (page < 0) page = 0;
+
+        Pageable pageable = PageRequest.of(page, size);
+        var pageResult = skinCatalogoRepository.findAll(pageable);
+        List<SkinCatalogo> catalogoItems = pageResult.getContent();
+        List<Long> catalogoIds = catalogoItems.stream()
+                .map(SkinCatalogo::getId)
+                .toList();
+
+        Map<Long, List<Skin>> publicacionesPorCatalogo = catalogoIds.isEmpty()
+                ? Map.of()
+                : skinRepository
+                        .findByCatalogo_IdInAndActiveTrueAndStockGreaterThan(catalogoIds, 0)
+                        .stream()
+                        .collect(Collectors.groupingBy(s -> s.getCatalogo().getId()));
+
+        List<SkinCatalogoMarketStatsResponse> content = new ArrayList<>();
+        for (SkinCatalogo cat : catalogoItems) {
+            content.add(toMarketStats(cat, publicacionesPorCatalogo.getOrDefault(cat.getId(), List.of())));
+        }
+
+        Map<String, Object> respuesta = new HashMap<>();
+        respuesta.put("page", page);
+        respuesta.put("size", size);
+        respuesta.put("totalElements", pageResult.getTotalElements());
+        respuesta.put("totalPages", pageResult.getTotalPages());
+        respuesta.put("hasNext", pageResult.hasNext());
+        respuesta.put("hasPrevious", pageResult.hasPrevious());
+        respuesta.put("content", content);
+
+        return ResponseEntity.ok(ApiResponse.of(
+                "Catálogo admin con stock/precio promedio calculado", respuesta));
     }
 
     /** GET /catalogo/{id} — detalle de un item. */
@@ -166,5 +222,54 @@ public class SkinCatalogoController {
                     .body(ApiResponse.of("Item no encontrado: " + id));
         }
         return ResponseEntity.ok(ApiResponse.of("Item eliminado"));
+    }
+
+    private SkinCatalogoMarketStatsResponse toMarketStats(SkinCatalogo cat, List<Skin> publicaciones) {
+        SkinCatalogoMarketStatsResponse r = new SkinCatalogoMarketStatsResponse();
+        r.setCatalogoId(cat.getId());
+        r.setName(cat.getName());
+        r.setMarketHashName(cat.getMarketHashName());
+        r.setWeaponName(cat.getWeaponName());
+        r.setCategoryName(cat.getCategoryName());
+        r.setExteriorName(cat.getExteriorName());
+        r.setImageUrl(cat.getImageUrl());
+        r.setSupportsStattrak(cat.getSupportsStattrak());
+
+        MarketStats normal = calcularStats(publicaciones, false);
+        r.setStock(normal.stock());
+        r.setPrecioPromedio(normal.promedio());
+        r.setPrecioMinimo(normal.minimo());
+        r.setPrecioMaximo(normal.maximo());
+
+        MarketStats stattrak = calcularStats(publicaciones, true);
+        r.setStockStattrak(stattrak.stock());
+        r.setPrecioPromedioStattrak(stattrak.promedio());
+        r.setPrecioMinimoStattrak(stattrak.minimo());
+        r.setPrecioMaximoStattrak(stattrak.maximo());
+        return r;
+    }
+
+    private MarketStats calcularStats(List<Skin> publicaciones, boolean stattrak) {
+        List<Double> precios = publicaciones.stream()
+                .filter(s -> Boolean.TRUE.equals(s.getStattrak()) == stattrak)
+                .map(Skin::getFinalPrice)
+                .toList();
+
+        if (precios.isEmpty()) {
+            return new MarketStats(0, null, null, null);
+        }
+
+        double sum = 0.0;
+        double min = Double.MAX_VALUE;
+        double max = Double.MIN_VALUE;
+        for (Double precio : precios) {
+            sum += precio;
+            min = Math.min(min, precio);
+            max = Math.max(max, precio);
+        }
+        return new MarketStats(precios.size(), sum / precios.size(), min, max);
+    }
+
+    private record MarketStats(Integer stock, Double promedio, Double minimo, Double maximo) {
     }
 }
