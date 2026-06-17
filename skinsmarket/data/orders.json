@@ -1,0 +1,61 @@
+[ {
+  "orderId" : 62,
+  "operationType" : "PURCHASE",
+  "status" : "COMPLETED",
+  "direction" : "BOT_TO_USER",
+  "partnerSteamId64" : "76561198309688914",
+  "partnerTradeUrl" : "https://steamcommunity.com/tradeoffer/new/?partner=349423186&token=a98DVhsX",
+  "assetIds" : [ "SKIN-9" ],
+  "botTradeOfferId" : null,
+  "createdAt" : "2026-05-26T19:57:09.276795",
+  "updatedAt" : "2026-05-26T19:57:19.517419",
+  "mockMode" : "true"
+}, {
+  "orderId" : 65,
+  "operationType" : "PURCHASE",
+  "status" : "COMPLETED",
+  "direction" : "BOT_TO_USER",
+  "partnerSteamId64" : "76561198309688914",
+  "partnerTradeUrl" : "https://steamcommunity.com/tradeoffer/new/?partner=349423186&token=a98DVhsX",
+  "assetIds" : [ "SKIN-14" ],
+  "botTradeOfferId" : null,
+  "createdAt" : "2026-05-26T20:00:31.919751",
+  "updatedAt" : "2026-05-26T20:00:42.041566",
+  "mockMode" : "true"
+}, {
+  "orderId" : 66,
+  "operationType" : "PURCHASE",
+  "status" : "COMPLETED",
+  "direction" : "BOT_TO_USER",
+  "partnerSteamId64" : "76561198309688914",
+  "partnerTradeUrl" : "https://steamcommunity.com/tradeoffer/new/?partner=349423186&token=a98DVhsX",
+  "assetIds" : [ "SKIN-13" ],
+  "botTradeOfferId" : null,
+  "createdAt" : "2026-05-26T20:18:14.430127",
+  "updatedAt" : "2026-05-26T20:18:24.582975",
+  "mockMode" : "true"
+}, {
+  "orderId" : 68,
+  "operationType" : "PURCHASE",
+  "status" : "COMPLETED",
+  "direction" : "BOT_TO_USER",
+  "partnerSteamId64" : "76561198365646136",
+  "partnerTradeUrl" : "https://steamcommunity.com/tradeoffer/new/?partner=405380408&token=z7rw-4l7",
+  "assetIds" : [ "SKIN-31" ],
+  "botTradeOfferId" : null,
+  "createdAt" : "2026-05-26T22:01:31.181492",
+  "updatedAt" : "2026-05-26T22:01:41.293804",
+  "mockMode" : "true"
+}, {
+  "orderId" : 69,
+  "operationType" : "PURCHASE",
+  "status" : "COMPLETED",
+  "direction" : "BOT_TO_USER",
+  "partnerSteamId64" : "76561198309688914",
+  "partnerTradeUrl" : "https://steamcommunity.com/tradeoffer/new/?partner=349423186&token=a98DVhsX",
+  "assetIds" : [ "SKIN-6" ],
+  "botTradeOfferId" : null,
+  "createdAt" : "2026-05-26T22:25:47.129824",
+  "updatedAt" : "2026-05-26T22:25:57.229522",
+  "mockMode" : "true"
+} ]

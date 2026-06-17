@@ -1,0 +1,25 @@
+[ {
+  "orderId" : 18,
+  "operationType" : "PURCHASE",
+  "status" : "COMPLETED",
+  "direction" : "BOT_TO_USER",
+  "partnerSteamId64" : null,
+  "partnerTradeUrl" : null,
+  "assetIds" : [ "SKIN-7" ],
+  "botTradeOfferId" : null,
+  "createdAt" : "2026-05-25T20:45:56.587679",
+  "updatedAt" : "2026-05-25T20:46:06.661413",
+  "mockMode" : "true"
+}, {
+  "orderId" : 21,
+  "operationType" : "PURCHASE",
+  "status" : "COMPLETED",
+  "direction" : "BOT_TO_USER",
+  "partnerSteamId64" : "76561198309688914",
+  "partnerTradeUrl" : null,
+  "assetIds" : [ "SKIN-8" ],
+  "botTradeOfferId" : null,
+  "createdAt" : "2026-05-26T08:00:29.998861",
+  "updatedAt" : "2026-05-26T08:00:40.084863",
+  "mockMode" : "true"
+} ]

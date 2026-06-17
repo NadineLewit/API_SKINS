@@ -1,0 +1,828 @@
+package skinsmarket.demo.service;
+
+import com.mercadopago.MercadoPagoConfig;
+import com.mercadopago.client.common.IdentificationRequest;
+import com.mercadopago.client.payment.PaymentCreateRequest;
+import com.mercadopago.client.payment.PaymentClient;
+import com.mercadopago.client.payment.PaymentPayerRequest;
+import com.mercadopago.client.preference.PreferenceBackUrlsRequest;
+import com.mercadopago.client.preference.PreferenceClient;
+import com.mercadopago.client.preference.PreferenceItemRequest;
+import com.mercadopago.client.preference.PreferenceRequest;
+import com.mercadopago.core.MPRequestOptions;
+import com.mercadopago.net.MPResultsResourcesPage;
+import com.mercadopago.net.MPSearchRequest;
+import com.mercadopago.resources.payment.Payment;
+import com.mercadopago.resources.payment.PaymentStatus;
+import com.mercadopago.resources.preference.Preference;
+import jakarta.transaction.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
+import skinsmarket.demo.controller.order.OrderDetailResponse;
+import skinsmarket.demo.controller.order.OrderResponse;
+import skinsmarket.demo.controller.payment.BrickPaymentRequest;
+import skinsmarket.demo.controller.payment.BrickPaymentResponse;
+import skinsmarket.demo.controller.payment.BrickPreferenceResponse;
+import skinsmarket.demo.controller.payment.MercadoPagoWebhookRequest;
+import skinsmarket.demo.controller.payment.TestCardPaymentRequest;
+import skinsmarket.demo.entity.InventarioItem;
+import skinsmarket.demo.entity.OperationType;
+import skinsmarket.demo.entity.Order;
+import skinsmarket.demo.entity.OrderDetail;
+import skinsmarket.demo.entity.Skin;
+import skinsmarket.demo.entity.TradeStatus;
+import skinsmarket.demo.repository.InventarioItemRepository;
+import skinsmarket.demo.repository.OrderRepository;
+import skinsmarket.demo.repository.SkinRepository;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * PaymentServiceImpl con integración al archivo orders.json del bot.
+ *
+ * CAMBIO sobre la versión anterior:
+ *   - Cuando una orden pasa a paymentStatus=PAID, ADEMÁS de actualizar la BD,
+ *     se escribe una entrada en orders.json para que el bot prepare la entrega
+ *     de las skins compradas. El MockTradeScheduler también detecta el PAID y
+ *     avanza el tradeStatus a PREPARING_TRADE → BOT_SENT → COMPLETED.
+ *
+ * El resto de la lógica MP (preferencias, brick, webhook) sigue igual.
+ */
+@Service
+public class PaymentServiceImpl implements PaymentService {
+
+    private static final Set<String> MERCADO_PAGO_TEST_CARDS = Set.of(
+            "4509953566233704",
+            "4002768694395619",
+            "5031755734530604",
+            "5287338310253304",
+            "371180303257522"
+    );
+
+    @Autowired
+    private OrderService orderService;
+
+    @Autowired
+    private OrderRepository orderRepository;
+
+    /** ✨ NUEVO: para escribir entradas en orders.json al confirmar pago. */
+    @Autowired
+    private BotTradeOrdersFileService botFileService;
+
+    @Autowired
+    private InventarioItemRepository inventarioItemRepository;
+
+    @Autowired
+    private InventarioItemCreadorHelper inventarioItemCreadorHelper;
+
+    @Autowired
+    private SkinRepository skinRepository;
+
+    @Autowired
+    private EventoService eventoService;
+
+    @Autowired
+    private RestTemplate restTemplate;
+
+    @Value("${mercadopago.access-token}")
+    private String accessToken;
+
+    @Value("${mercadopago.public-key}")
+    private String publicKey;
+
+    @Value("${mercadopago.backend-url}")
+    private String backendUrl;
+
+    @Value("${mercadopago.currency-id}")
+    private String currencyId;
+
+    @Override
+    @Transactional(rollbackOn = Exception.class)
+    public BrickPreferenceResponse createBrickPreferenceFromCarrito(String email, String codigoCupon) throws Exception {
+        OrderResponse orderResponse = orderService.createOrderFromCarrito(email, codigoCupon);
+        return createPreferenceForOrder(email, orderResponse.getId());
+    }
+
+    @Override
+    @Transactional(rollbackOn = Exception.class)
+    public BrickPreferenceResponse createBrickPreferenceForExistingOrder(String email, Long orderId) throws Exception {
+        return createPreferenceForOrder(email, orderId);
+    }
+
+    private BrickPreferenceResponse createPreferenceForOrder(String email, Long orderId) throws Exception {
+        ensureConfigured();
+        ensurePublicKeyConfigured();
+
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Orden no encontrada: " + orderId));
+
+        if (!order.getUser().getEmail().equals(email)) {
+            throw new RuntimeException("La orden no pertenece al usuario autenticado");
+        }
+        validatePayableOrder(order);
+        validarPublicacionesDisponiblesParaPago(order);
+
+        MercadoPagoConfig.setAccessToken(accessToken);
+
+        PreferenceItemRequest item = PreferenceItemRequest.builder()
+                .id("ORDER-" + order.getId())
+                .title("Orden #" + order.getId() + " - Skins Market")
+                .description(buildDescription(order))
+                .quantity(1)
+                .unitPrice(BigDecimal.valueOf(paymentAmount(order)).setScale(2, RoundingMode.HALF_UP))
+                .currencyId(currencyId)
+                .build();
+
+        PreferenceBackUrlsRequest backUrls = PreferenceBackUrlsRequest.builder()
+                .success(backendUrl + "/payments/return/success")
+                .failure(backendUrl + "/payments/return/failure")
+                .pending(backendUrl + "/payments/return/pending")
+                .build();
+
+        PreferenceRequest preferenceRequest = PreferenceRequest.builder()
+                .items(List.of(item))
+                .externalReference(order.getId().toString())
+                .backUrls(backUrls)
+                .purpose("wallet_purchase")
+                .notificationUrl(backendUrl + "/payments/webhook")
+                .build();
+
+        Preference preference = new PreferenceClient().create(preferenceRequest);
+
+        order.setPaymentStatus("PENDING_PAYMENT");
+        order.setMercadopagoPreferenceId(preference.getId());
+        orderRepository.save(order);
+
+        return new BrickPreferenceResponse(
+                mapToOrderResponse(order),
+                preference.getId(),
+                publicKey,
+                order.getPaymentStatus(),
+                preference.getInitPoint(),
+                preference.getSandboxInitPoint(),
+                checkoutUrlFor(preference),
+                effectiveCheckoutMode()
+        );
+    }
+
+    @Override
+    @Transactional(rollbackOn = Exception.class)
+    public BrickPaymentResponse processBrickPayment(
+            String email,
+            Long orderId,
+            BrickPaymentRequest request,
+            String idempotencyKey) throws Exception {
+        ensureConfigured();
+
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Orden no encontrada: " + orderId));
+
+        if (!order.getUser().getEmail().equals(email)) {
+            throw new RuntimeException("La orden no pertenece al usuario autenticado");
+        }
+        if (request == null) {
+            throw new RuntimeException("Faltan los datos del pago enviados por Payment Brick");
+        }
+        if (request.getPaymentMethodId() == null || request.getPaymentMethodId().isBlank()) {
+            throw new RuntimeException("Falta payment_method_id/paymentMethodId");
+        }
+        validatePayableOrder(order);
+        validarPublicacionesDisponiblesParaPago(order);
+
+        MercadoPagoConfig.setAccessToken(accessToken);
+
+        PaymentCreateRequest.PaymentCreateRequestBuilder paymentBuilder = PaymentCreateRequest.builder()
+                .transactionAmount(BigDecimal.valueOf(paymentAmount(order)).setScale(2, RoundingMode.HALF_UP))
+                .token(blankToNull(request.getToken()))
+                .description(firstNonBlank(request.getDescription(), buildDescription(order)))
+                .installments(request.getInstallments() != null ? request.getInstallments() : 1)
+                .paymentMethodId(request.getPaymentMethodId())
+                .issuerId(blankToNull(request.getIssuerId()))
+                .externalReference(order.getId().toString())
+                .payer(buildPayer(order, request));
+
+        if (isPublicHttpsBackendUrl()) {
+            paymentBuilder.notificationUrl(backendUrl + "/payments/webhook");
+        }
+
+        PaymentCreateRequest paymentCreateRequest = paymentBuilder.build();
+
+        Payment payment = new PaymentClient().create(paymentCreateRequest, buildRequestOptions(idempotencyKey));
+        updateOrderWithPayment(order, payment);
+
+        return new BrickPaymentResponse(
+                mapToOrderResponse(order),
+                payment.getId(),
+                payment.getStatus(),
+                payment.getStatusDetail(),
+                payment.getPaymentMethodId(),
+                payment.getPaymentTypeId(),
+                payment.getTransactionDetails() != null
+                        ? payment.getTransactionDetails().getExternalResourceUrl()
+                        : null
+        );
+    }
+
+    @Override
+    @Transactional(rollbackOn = Exception.class)
+    public BrickPaymentResponse processTestCardPayment(
+            String email,
+            Long orderId,
+            TestCardPaymentRequest request,
+            String idempotencyKey) throws Exception {
+        ensureConfigured();
+        ensurePublicKeyConfigured();
+        ensureTestCredentials();
+
+        if (request == null) {
+            throw new RuntimeException("Faltan los datos de la tarjeta de prueba");
+        }
+
+        String cardNumber = normalizeCardNumber(request.getCardNumber());
+        if (!MERCADO_PAGO_TEST_CARDS.contains(cardNumber)) {
+            throw new RuntimeException("Usa una tarjeta de prueba oficial de Mercado Pago");
+        }
+
+        String token = createTestCardToken(request, cardNumber);
+        BrickPaymentRequest brickRequest = new BrickPaymentRequest();
+        brickRequest.setToken(token);
+        brickRequest.setPaymentMethodId(firstNonBlank(
+                request.getPaymentMethodId(),
+                inferPaymentMethodId(cardNumber)
+        ));
+        brickRequest.setInstallments(request.getInstallments() != null ? request.getInstallments() : 1);
+
+        BrickPaymentRequest.Payer payer = new BrickPaymentRequest.Payer();
+        payer.setEmail(firstNonBlank(request.getEmail(), email));
+        payer.setFirstName(blankToNull(request.getCardholderName()));
+
+        BrickPaymentRequest.Identification identification = new BrickPaymentRequest.Identification();
+        identification.setType(firstNonBlank(request.getDocumentType(), "DNI"));
+        identification.setNumber(firstNonBlank(request.getDocumentNumber(), "12345678"));
+        payer.setIdentification(identification);
+
+        brickRequest.setPayer(payer);
+        return processBrickPayment(email, orderId, brickRequest, idempotencyKey);
+    }
+
+    @Override
+    @Transactional(rollbackOn = Exception.class)
+    public BrickPaymentResponse syncPaymentStatus(String email, Long orderId) throws Exception {
+        ensureConfigured();
+
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new RuntimeException("Orden no encontrada: " + orderId));
+
+        if (!order.getUser().getEmail().equals(email)) {
+            throw new RuntimeException("La orden no pertenece al usuario autenticado");
+        }
+
+        MercadoPagoConfig.setAccessToken(accessToken);
+
+        Payment payment = null;
+        if (order.getMercadopagoPaymentId() != null) {
+            payment = new PaymentClient().get(order.getMercadopagoPaymentId());
+        } else {
+            payment = findPaymentByExternalReference(order.getId().toString());
+        }
+
+        if (payment != null) {
+            updateOrderWithPayment(order, payment);
+            return mapToBrickPaymentResponse(order, payment);
+        }
+
+        return new BrickPaymentResponse(
+                mapToOrderResponse(order),
+                null,
+                paymentStatusToMercadoPagoStatus(order.getPaymentStatus()),
+                null,
+                null,
+                null,
+                null
+        );
+    }
+
+    @Override
+    @Transactional(rollbackOn = Exception.class)
+    public BrickPaymentResponse syncPendingPayments(String email) throws Exception {
+        ensureConfigured();
+        MercadoPagoConfig.setAccessToken(accessToken);
+
+        List<Order> pendingOrders = orderRepository
+                .findByUserEmailAndPaymentStatusOrderByDateDesc(email, "PENDING_PAYMENT");
+
+        BrickPaymentResponse latestResponse = null;
+        for (Order pendingOrder : pendingOrders) {
+            Payment payment = findPaymentByExternalReference(pendingOrder.getId().toString());
+            if (payment == null) continue;
+
+            updateOrderWithPayment(pendingOrder, payment);
+            BrickPaymentResponse response = mapToBrickPaymentResponse(pendingOrder, payment);
+            latestResponse = response;
+
+            if (PaymentStatus.APPROVED.equals(payment.getStatus())) {
+                return response;
+            }
+        }
+
+        if (latestResponse != null) {
+            return latestResponse;
+        }
+
+        return new BrickPaymentResponse(
+                null,
+                null,
+                PaymentStatus.PENDING,
+                null,
+                null,
+                null,
+                null
+        );
+    }
+
+    @Override
+    @Transactional
+    public void processWebhook(String type, String topic, String id, MercadoPagoWebhookRequest body) {
+        String notificationType = firstNonBlank(firstNonBlank(type, topic), body != null ? body.getType() : null);
+        String paymentId = firstNonBlank(id, body != null && body.getData() != null ? body.getData().getId() : null);
+
+        if (!"payment".equals(notificationType) || paymentId == null) {
+            return;
+        }
+
+        try {
+            ensureConfigured();
+            MercadoPagoConfig.setAccessToken(accessToken);
+
+            Payment payment = new PaymentClient().get(Long.valueOf(paymentId));
+            Long orderId = Long.valueOf(payment.getExternalReference());
+
+            orderRepository.findById(orderId).ifPresent(order -> {
+                updateOrderWithPayment(order, payment);
+            });
+        } catch (Exception e) {
+            throw new RuntimeException("No se pudo procesar la notificacion de Mercado Pago", e);
+        }
+    }
+
+    /**
+     * Cuando el payment se actualiza, si pasa a PAID y es una compra,
+     * entrega ahora si la skin ya está libre o crea una reserva interna si
+     * todavía está bloqueada.
+     */
+    private void updateOrderWithPayment(Order order, Payment payment) {
+        String previousStatus = order.getPaymentStatus();
+        order.setMercadopagoPaymentId(payment.getId());
+        String newStatus = mapPaymentStatus(payment.getStatus());
+        order.setPaymentStatus(newStatus);
+        orderRepository.save(order);
+
+        if (esPagoFallidoOCerrado(newStatus) && "PAID".equals(previousStatus)) {
+            liberarPublicacionesReservadas(order);
+        }
+
+        if ("PAID".equals(newStatus)
+                && order.getOperationType() == OperationType.EXCHANGE
+                && order.getTradeStatus() == TradeStatus.WAITING_DIFFERENCE) {
+            order.setTradeStatus(TradeStatus.PREPARING_TRADE);
+            orderRepository.save(order);
+            botFileService.updateStatus(order.getId(), order.getTradeStatus().name());
+        }
+
+        // Si la compra fue pagada con éxito y es PURCHASE, se entrega ahora o
+        // queda reservada si alguna skin todavía está bloqueada.
+        if ("PAID".equals(newStatus) &&
+                !"PAID".equals(previousStatus) &&
+                order.getOperationType() == OperationType.PURCHASE) {
+            reservarPublicacionesPagadas(order);
+            registrarVentasSiCorresponde(order, previousStatus);
+            crearItemsPendientesPorCompra(order);
+            if (tieneSkinsBloqueadas(order)) {
+                order.setTradeStatus(TradeStatus.WAITING_UNLOCK);
+                orderRepository.save(order);
+            } else {
+                crearBotOrderParaCompra(order);
+            }
+        }
+    }
+
+    private Payment findPaymentByExternalReference(String externalReference) throws Exception {
+        MPSearchRequest searchRequest = MPSearchRequest.builder()
+                .limit(10)
+                .offset(0)
+                .filters(Map.of("external_reference", externalReference))
+                .build();
+
+        MPResultsResourcesPage<Payment> payments = new PaymentClient().search(searchRequest);
+        if (payments.getResults() == null || payments.getResults().isEmpty()) {
+            return null;
+        }
+
+        return payments.getResults().stream()
+                .filter((payment) -> PaymentStatus.APPROVED.equals(payment.getStatus()))
+                .findFirst()
+                .orElse(payments.getResults().get(0));
+    }
+
+    private BrickPaymentResponse mapToBrickPaymentResponse(Order order, Payment payment) {
+        return new BrickPaymentResponse(
+                mapToOrderResponse(order),
+                payment.getId(),
+                payment.getStatus(),
+                payment.getStatusDetail(),
+                payment.getPaymentMethodId(),
+                payment.getPaymentTypeId(),
+                payment.getTransactionDetails() != null
+                        ? payment.getTransactionDetails().getExternalResourceUrl()
+                        : null
+        );
+    }
+
+    private void validarPublicacionesDisponiblesParaPago(Order order) {
+        if (order.getOperationType() != OperationType.PURCHASE) return;
+
+        for (OrderDetail d : detallesOrdenados(order)) {
+            Skin skin = skinRepository.findByIdForUpdate(d.getSkin().getId())
+                    .orElseThrow(() -> new RuntimeException("La skin de la orden ya no existe"));
+            validarPublicacionDisponible(skin);
+        }
+    }
+
+    private void reservarPublicacionesPagadas(Order order) {
+        if (order.getOperationType() != OperationType.PURCHASE) return;
+
+        for (OrderDetail d : detallesOrdenados(order)) {
+            Skin skin = skinRepository.findByIdForUpdate(d.getSkin().getId())
+                    .orElseThrow(() -> new RuntimeException("La skin de la orden ya no existe"));
+            validarPublicacionDisponible(skin);
+            skin.setStock(0);
+            skin.setEstadoPublicacion(Skin.EstadoPublicacion.RESERVADA);
+            skinRepository.save(skin);
+        }
+    }
+
+    private void validarPublicacionDisponible(Skin skin) {
+        if (skin == null || !Boolean.TRUE.equals(skin.getActive())) {
+            throw new RuntimeException("La skin ya no está disponible");
+        }
+        if (Boolean.FALSE.equals(skin.getVendible())) {
+            throw new RuntimeException("La skin no está habilitada para compra directa");
+        }
+        if (skin.getEstadoPublicacion() != null &&
+                skin.getEstadoPublicacion() != Skin.EstadoPublicacion.PUBLICADA) {
+            throw new RuntimeException("La skin ya fue reservada o vendida");
+        }
+        if (skin.getStock() == null || skin.getStock() < 1) {
+            throw new RuntimeException("La skin ya fue reservada o vendida");
+        }
+    }
+
+    private List<OrderDetail> detallesOrdenados(Order order) {
+        return order.getOrderDetails().stream()
+                .filter((detail) -> detail.getSkin() != null && detail.getSkin().getId() != null)
+                .sorted((a, b) -> a.getSkin().getId().compareTo(b.getSkin().getId()))
+                .toList();
+    }
+
+    private void registrarVentasSiCorresponde(Order order, String previousStatus) {
+        if ("PAID".equals(previousStatus)) return;
+
+        for (OrderDetail detail : order.getOrderDetails()) {
+            if (detail.getSkin() == null) continue;
+            eventoService.registrarVenta(
+                    order,
+                    detail.getSkin(),
+                    detail.getQuantity() != null ? detail.getQuantity() : 1,
+                    detail.getUnitPrice() != null ? detail.getUnitPrice() : 0.0
+            );
+        }
+    }
+
+    private boolean tieneSkinsBloqueadas(Order order) {
+        for (OrderDetail d : order.getOrderDetails()) {
+            if (d.getSkin() != null && d.getSkin().isLocked()) return true;
+        }
+        return false;
+    }
+
+    private boolean esPagoFallidoOCerrado(String status) {
+        return "REJECTED".equals(status) ||
+                "CANCELLED".equals(status) ||
+                "REFUNDED".equals(status) ||
+                "CHARGED_BACK".equals(status);
+    }
+
+    private void liberarPublicacionesReservadas(Order order) {
+        if (order.getTradeStatus() == TradeStatus.COMPLETED ||
+                order.getTradeStatus() == TradeStatus.BOT_SENT) {
+            return;
+        }
+        for (OrderDetail d : order.getOrderDetails()) {
+            if (d.getSkin() == null) continue;
+            d.getSkin().setStock(1);
+            d.getSkin().setActive(true);
+            d.getSkin().setEstadoPublicacion(Skin.EstadoPublicacion.PUBLICADA);
+        }
+        if (order.getTradeStatus() == TradeStatus.WAITING_PAYMENT ||
+                order.getTradeStatus() == TradeStatus.WAITING_DIFFERENCE) {
+            order.setTradeStatus(TradeStatus.CANCELLED);
+        }
+        orderRepository.save(order);
+    }
+
+    private void crearItemsPendientesPorCompra(Order order) {
+        for (OrderDetail d : order.getOrderDetails()) {
+            Skin skin = d.getSkin();
+            if (skin == null) continue;
+            try {
+                // Usamos el helper con REQUIRES_NEW para que un eventual duplicate-key
+                // (si dos requests llegan al mismo tiempo) no rompa la transacción principal.
+                inventarioItemCreadorHelper.crearSiNoExiste(
+                        order.getUser(), order, skin, assetIdInventarioCompra(order, skin));
+            } catch (Exception e) {
+                // Si el item ya existía o hubo un conflicto, no es crítico para el pago.
+                System.err.println("[PAYMENT] No se pudo crear item inventario para orden "
+                        + order.getId() + ": " + e.getMessage());
+            }
+        }
+    }
+
+    private String assetIdInventarioCompra(Order order, Skin skin) {
+        if (skin.getSteamAssetId() != null && !skin.getSteamAssetId().isBlank()) {
+            return skin.getSteamAssetId();
+        }
+        return "PURCHASE-" + order.getId() + "-" + skin.getId();
+    }
+
+    private void crearBotOrderParaCompra(Order order) {
+        List<String> assetIds = new ArrayList<>();
+        // En PURCHASE, los assetIds reales son del bot.
+        // Si la publicación nació desde inventario, ya guardamos el assetId real.
+        // Las publicaciones admin pueden no tenerlo; en ese caso mantenemos el
+        // identificador lógico para el mock.
+        for (OrderDetail d : order.getOrderDetails()) {
+            if (d.getSkin() != null) {
+                String steamAssetId = d.getSkin().getSteamAssetId();
+                String assetId = (steamAssetId != null && !steamAssetId.isBlank())
+                        ? steamAssetId
+                        : "SKIN-" + d.getSkin().getId();
+                int quantity = d.getQuantity() != null ? d.getQuantity() : 1;
+                for (int i = 0; i < quantity; i++) {
+                    assetIds.add(assetId);
+                }
+            }
+        }
+
+        BotTradeOrdersFileService.BotOrder bo = new BotTradeOrdersFileService.BotOrder();
+        bo.orderId = order.getId();
+        bo.operationType = OperationType.PURCHASE.name();
+        bo.status = "PAID_READY_TO_SEND";
+        bo.direction = "BOT_TO_USER";
+        bo.partnerSteamId64 = order.getUser().getSteamId64();
+        bo.partnerTradeUrl = order.getUser().getTradeUrl();
+        bo.assetIds = assetIds;
+        bo.mockMode = "true";
+        botFileService.upsert(bo);
+    }
+
+    private void ensureConfigured() {
+        if (accessToken == null || accessToken.isBlank()) {
+            throw new RuntimeException("Falta configurar MERCADOPAGO_ACCESS_TOKEN");
+        }
+    }
+
+    private void ensurePublicKeyConfigured() {
+        if (publicKey == null || publicKey.isBlank()) {
+            throw new RuntimeException("Falta configurar MERCADOPAGO_PUBLIC_KEY");
+        }
+    }
+
+    private void ensureTestCredentials() {
+        if (!accessToken.startsWith("TEST-") || !publicKey.startsWith("TEST-")) {
+            throw new RuntimeException("El pago con tarjeta de prueba solo funciona con credenciales TEST de Mercado Pago");
+        }
+    }
+
+    private String createTestCardToken(TestCardPaymentRequest request, String cardNumber) {
+        Integer expirationMonth = request.getExpirationMonth();
+        Integer expirationYear = normalizeExpirationYear(request.getExpirationYear());
+        if (expirationMonth == null || expirationMonth < 1 || expirationMonth > 12 || expirationYear == null) {
+            throw new RuntimeException("La fecha de vencimiento de la tarjeta de prueba es inválida");
+        }
+        if (request.getSecurityCode() == null || request.getSecurityCode().isBlank()) {
+            throw new RuntimeException("Falta el código de seguridad de la tarjeta de prueba");
+        }
+
+        String url = UriComponentsBuilder
+                .fromUriString("https://api.mercadopago.com/v1/card_tokens")
+                .queryParam("public_key", publicKey)
+                .toUriString();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("card_number", cardNumber);
+        body.put("expiration_month", expirationMonth);
+        body.put("expiration_year", expirationYear);
+        body.put("security_code", request.getSecurityCode().trim());
+        body.put("cardholder", Map.of(
+                "name", firstNonBlank(request.getCardholderName(), "APRO"),
+                "identification", Map.of(
+                        "type", firstNonBlank(request.getDocumentType(), "DNI"),
+                        "number", firstNonBlank(request.getDocumentNumber(), "12345678")
+                )
+        ));
+
+        ResponseEntity<Map> response = restTemplate.postForEntity(url, new HttpEntity<>(body, headers), Map.class);
+        Object token = response.getBody() != null ? response.getBody().get("id") : null;
+        if (token == null || token.toString().isBlank()) {
+            throw new RuntimeException("Mercado Pago no devolvió token para la tarjeta de prueba");
+        }
+
+        return token.toString();
+    }
+
+    private String normalizeCardNumber(String cardNumber) {
+        return cardNumber == null ? "" : cardNumber.replaceAll("\\D", "");
+    }
+
+    private Integer normalizeExpirationYear(Integer expirationYear) {
+        if (expirationYear == null) return null;
+        return expirationYear < 100 ? 2000 + expirationYear : expirationYear;
+    }
+
+    private String inferPaymentMethodId(String cardNumber) {
+        if (cardNumber.startsWith("4")) return "visa";
+        if (cardNumber.startsWith("5")) return "master";
+        if (cardNumber.startsWith("3")) return "amex";
+        return null;
+    }
+
+    private void validatePayableOrder(Order order) {
+        if (order.getOperationType() == OperationType.SALE || order.getOperationType() == OperationType.RETURN) {
+            throw new RuntimeException("Las operaciones " + order.getOperationType() + " no se pagan por Mercado Pago");
+        }
+        if (order.getOperationType() == OperationType.EXCHANGE
+                && (order.getPriceDifference() == null || order.getPriceDifference() <= 0)) {
+            throw new RuntimeException("Este intercambio no tiene diferencia positiva para pagar");
+        }
+        if (paymentAmount(order) <= 0) {
+            throw new RuntimeException(
+                    "La orden " + order.getId() + " tiene totalFinal inválido para pagar: "
+                            + order.getTotalFinal() + ". Usá el order_id devuelto por la preferencia más reciente "
+                            + "y verificá que la publicación tenga precio mayor a 0."
+            );
+        }
+    }
+
+    private double paymentAmount(Order order) {
+        if (order.getOperationType() == OperationType.EXCHANGE) {
+            return order.getPriceDifference() != null ? Math.max(order.getPriceDifference(), 0.0) : 0.0;
+        }
+        return order.getTotalFinal() != null ? order.getTotalFinal() : 0.0;
+    }
+
+    private PaymentPayerRequest buildPayer(Order order, BrickPaymentRequest request) {
+        BrickPaymentRequest.Payer payer = request.getPayer();
+        PaymentPayerRequest.PaymentPayerRequestBuilder builder = PaymentPayerRequest.builder()
+                .email(payer != null && payer.getEmail() != null && !payer.getEmail().isBlank()
+                        ? payer.getEmail()
+                        : order.getUser().getEmail());
+
+        if (payer != null) {
+            builder.firstName(blankToNull(payer.getFirstName()));
+            builder.lastName(blankToNull(payer.getLastName()));
+
+            if (payer.getIdentification() != null
+                    && payer.getIdentification().getType() != null
+                    && payer.getIdentification().getNumber() != null) {
+                builder.identification(IdentificationRequest.builder()
+                        .type(payer.getIdentification().getType())
+                        .number(payer.getIdentification().getNumber())
+                        .build());
+            }
+        }
+
+        return builder.build();
+    }
+
+    private MPRequestOptions buildRequestOptions(String idempotencyKey) {
+        Map<String, String> customHeaders = new HashMap<>();
+        customHeaders.put("x-idempotency-key",
+                idempotencyKey != null && !idempotencyKey.isBlank()
+                        ? idempotencyKey
+                        : UUID.randomUUID().toString());
+
+        return MPRequestOptions.builder()
+                .customHeaders(customHeaders)
+                .build();
+    }
+
+    private boolean isPublicHttpsBackendUrl() {
+        return backendUrl != null && backendUrl.startsWith("https://");
+    }
+
+    private String checkoutUrlFor(Preference preference) {
+        if (isSandboxCheckout()) {
+            return firstNonBlank(preference.getSandboxInitPoint(), preference.getInitPoint());
+        }
+        return firstNonBlank(preference.getInitPoint(), preference.getSandboxInitPoint());
+    }
+
+    private boolean isSandboxCheckout() {
+        return hasTestCredentials();
+    }
+
+    private boolean hasTestCredentials() {
+        return accessToken.startsWith("TEST-") && publicKey.startsWith("TEST-");
+    }
+
+    private String effectiveCheckoutMode() {
+        return isSandboxCheckout() ? "sandbox" : "production";
+    }
+
+    private String mapPaymentStatus(String status) {
+        if (PaymentStatus.APPROVED.equals(status)) return "PAID";
+        if (PaymentStatus.REJECTED.equals(status)) return "REJECTED";
+        if (PaymentStatus.CANCELLED.equals(status)) return "CANCELLED";
+        if (PaymentStatus.REFUNDED.equals(status)) return "REFUNDED";
+        if (PaymentStatus.CHARGED_BACK.equals(status)) return "CHARGED_BACK";
+        if (PaymentStatus.IN_PROCESS.equals(status)) return "IN_PROCESS";
+        if (PaymentStatus.PENDING.equals(status)) return "PENDING_PAYMENT";
+        return status != null ? status.toUpperCase() : "UNKNOWN";
+    }
+
+    private String paymentStatusToMercadoPagoStatus(String status) {
+        if ("PAID".equals(status)) return PaymentStatus.APPROVED;
+        if ("REJECTED".equals(status)) return PaymentStatus.REJECTED;
+        if ("CANCELLED".equals(status)) return PaymentStatus.CANCELLED;
+        if ("REFUNDED".equals(status)) return PaymentStatus.REFUNDED;
+        if ("PENDING_PAYMENT".equals(status)) return PaymentStatus.PENDING;
+        if ("IN_PROCESS".equals(status)) return PaymentStatus.IN_PROCESS;
+        return status != null ? status.toLowerCase() : "unknown";
+    }
+
+    private String buildDescription(Order order) {
+        return order.getOrderDetails().stream()
+                .map(detail -> detail.getQuantity() + "x " + detail.getSkin().getName())
+                .reduce((a, b) -> a + ", " + b)
+                .orElse("Compra de skins");
+    }
+
+    private OrderResponse mapToOrderResponse(Order order) {
+        OrderResponse response = new OrderResponse();
+        response.setId(order.getId());
+        response.setEmail(order.getUser().getEmail());
+        response.setDate(order.getDate());
+        response.setTotalPrice(order.getTotalPrice());
+        response.setDescuentoAplicado(order.getDescuentoAplicado());
+        response.setTotalFinal(order.getTotalFinal());
+        response.setPaymentStatus(order.getPaymentStatus());
+        response.setOperationType(order.getOperationType() != null ? order.getOperationType().name() : null);
+        response.setTradeStatus(order.getTradeStatus() != null ? order.getTradeStatus().name() : null);
+        response.setMercadopagoPreferenceId(order.getMercadopagoPreferenceId());
+        response.setMercadopagoPaymentId(order.getMercadopagoPaymentId());
+        response.setOrderDetailResponses(order.getOrderDetails().stream()
+                .map(this::mapDetail)
+                .toList());
+        return response;
+    }
+
+    private OrderDetailResponse mapDetail(OrderDetail detail) {
+        OrderDetailResponse response = new OrderDetailResponse();
+        response.setSkinId(detail.getSkin() != null ? detail.getSkin().getId() : null);
+        response.setSkinName(detail.getSkin() != null ? detail.getSkin().getName() : null);
+        response.setQuantity(detail.getQuantity());
+        response.setUnitPrice(detail.getUnitPrice());
+        response.setLocked(detail.getSkin() != null && detail.getSkin().isLocked());
+        response.setLockedUntil(detail.getSkin() != null ? detail.getSkin().getLockedUntil() : null);
+        response.setSecondsUntilUnlock(detail.getSkin() != null ? detail.getSkin().getSecondsUntilUnlock() : 0L);
+        return response;
+    }
+
+    private String firstNonBlank(String first, String second) {
+        if (first != null && !first.isBlank()) return first;
+        if (second != null && !second.isBlank()) return second;
+        return null;
+    }
+
+    private String blankToNull(String value) {
+        return value != null && !value.isBlank() ? value : null;
+    }
+}

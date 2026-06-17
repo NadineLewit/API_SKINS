@@ -1,0 +1,440 @@
+package skinsmarket.demo.service;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+import skinsmarket.demo.entity.InventarioItem;
+import skinsmarket.demo.entity.OperationType;
+import skinsmarket.demo.entity.Order;
+import skinsmarket.demo.entity.OrderDetail;
+import skinsmarket.demo.entity.Skin;
+import skinsmarket.demo.entity.TradeStatus;
+import skinsmarket.demo.entity.User;
+import skinsmarket.demo.repository.InventarioItemRepository;
+import skinsmarket.demo.repository.OrderRepository;
+import skinsmarket.demo.repository.SkinRepository;
+import skinsmarket.demo.repository.UserRepository;
+
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Scheduler que SIMULA al bot de Steam mientras la cuenta real está bloqueada
+ * hasta el 10/06.
+ *
+ * CORRE CADA 5 SEGUNDOS y procesa las órdenes según su estado:
+ *
+ *   1. PURCHASE + PAID + WAITING_PAYMENT → PREPARING_TRADE
+ *      (el pago llegó por MP, el bot prepara la entrega)
+ *
+ *   2. PREPARING_TRADE → BOT_SENT
+ *      (el bot envía la oferta al usuario)
+ *
+ *   3. BOT_SENT (más de 5s en este estado) → COMPLETED
+ *      (simulamos que el usuario aceptó el trade)
+ *
+ *   4. SALE/EXCHANGE en WAITING_USER_TRADE (más de 10s) → USER_TRADE_RECEIVED
+ *      (simulamos que el usuario envió las skins al bot)
+ *
+ *   5. RETURN_PENDING → RETURN_SENT → RETURNED (devolución completa)
+ *
+ * CUANDO STEAM HABILITE EL TRADING (10/06):
+ *   Apagar el mock con `mock.enabled=false` en application.properties.
+ *   El bot Node.js real va a hacer todas estas transiciones leyendo el
+ *   archivo orders.json y actualizándolo. El backend Java va a leer ese
+ *   archivo (BotTradeOrdersFileService) y sincronizar los estados a la BD.
+ */
+@Component
+public class MockTradeScheduler {
+
+    @Value("${mock.enabled:true}")
+    private boolean mockEnabled;
+
+    /** Segundos que tarda el "bot" en aceptar el trade enviado. */
+    @Value("${mock.bot.delay-seconds:5}")
+    private long mockDelaySeconds;
+
+    @Autowired private OrderRepository orderRepository;
+    @Autowired private InventarioItemRepository inventarioItemRepository;
+    @Autowired private UserRepository userRepository;
+    @Autowired private SkinRepository skinRepository;
+    @Autowired private BotTradeOrdersFileService botFileService;
+
+    /**
+     * Tick cada 5 segundos. Procesa todas las órdenes pendientes.
+     */
+    @Scheduled(fixedDelay = 5000, initialDelay = 10000)
+    @Transactional
+    public void tick() {
+        if (!mockEnabled) return;
+
+        repararInventarioComprasPagadas();
+
+        List<Order> pendientes = orderRepository.findByTradeStatusIn(List.of(
+                TradeStatus.WAITING_PAYMENT,
+                TradeStatus.WAITING_UNLOCK,
+                TradeStatus.WAITING_USER_TRADE,
+                TradeStatus.PREPARING_TRADE,
+                TradeStatus.BOT_SENT,
+                TradeStatus.RETURN_PENDING,
+                TradeStatus.RETURN_SENT
+        ));
+
+        if (pendientes.isEmpty()) return;
+
+        System.out.println("[MOCK] Procesando " + pendientes.size() + " órdenes pendientes...");
+
+        for (Order order : pendientes) {
+            try {
+                procesar(order);
+            } catch (Exception e) {
+                System.err.println("[MOCK] Error procesando orden " + order.getId() +
+                        ": " + e.getMessage());
+            }
+        }
+    }
+
+    private void repararInventarioComprasPagadas() {
+        List<Order> compras = orderRepository.findByOperationTypeAndPaymentStatusAndTradeStatusIn(
+                OperationType.PURCHASE,
+                "PAID",
+                List.of(
+                        TradeStatus.WAITING_PAYMENT,
+                        TradeStatus.WAITING_UNLOCK,
+                        TradeStatus.PREPARING_TRADE,
+                        TradeStatus.BOT_SENT,
+                        TradeStatus.COMPLETED
+                )
+        );
+
+        for (Order order : compras) {
+            // Los InventarioItems de compra los crea PaymentServiceImpl al confirmar el pago.
+            // No los creamos acá para evitar duplicados (unique constraint user_id + asset_id).
+            if (order.getTradeStatus() == TradeStatus.COMPLETED) {
+                try {
+                    marcarReservasComoEntregadas(order);
+                    transferirSkinAlComprador(order);
+                    acreditarSaldoVendedores(order);
+                } catch (Exception e) {
+                    System.err.println("[MOCK] Error reparando orden completada " + order.getId() +
+                            ": " + e.getMessage());
+                }
+            }
+        }
+    }
+
+    private void procesar(Order order) {
+        TradeStatus current = order.getTradeStatus();
+        long secondsSinceUpdate = secondsSince(order.getDate());
+
+        // CASO 1: Compra pagada → preparar trade
+        if (order.getOperationType() == OperationType.PURCHASE &&
+            current == TradeStatus.WAITING_PAYMENT &&
+            "PAID".equals(order.getPaymentStatus())) {
+
+            if (tieneSkinsBloqueadas(order)) {
+                avanzarA(order, TradeStatus.WAITING_UNLOCK,
+                        "Compra pagada, esperando desbloqueo de Steam");
+                return;
+            }
+
+            crearBotOrderParaCompra(order);
+            avanzarA(order, TradeStatus.PREPARING_TRADE,
+                    "Compra pagada, preparando envío del bot");
+            return;
+        }
+
+        // CASO 1b: Reserva pagada → al desbloquearse, preparar entrega
+        if (order.getOperationType() == OperationType.PURCHASE &&
+            current == TradeStatus.WAITING_UNLOCK &&
+            "PAID".equals(order.getPaymentStatus()) &&
+            !tieneSkinsBloqueadas(order)) {
+
+            crearBotOrderParaCompra(order);
+            avanzarA(order, TradeStatus.PREPARING_TRADE,
+                    "Reserva desbloqueada, preparando envío del bot");
+            return;
+        }
+
+        // CASO 2: SALE/EXCHANGE esperando trade del USER (más de 10s) → recibido
+        if (current == TradeStatus.WAITING_USER_TRADE && secondsSinceUpdate >= 10) {
+            if (order.getOperationType() == OperationType.SALE) {
+                avanzarA(order, TradeStatus.PREPARING_TRADE,
+                        "Mock: USER habría enviado skins, bot recibió, preparando pago");
+                // Marcar items del USER como "publicados" para que no los use de nuevo
+                marcarItemsComoBloqueados(order);
+            } else if (order.getOperationType() == OperationType.EXCHANGE) {
+                TradeStatus next = (order.getPriceDifference() != null && order.getPriceDifference() > 0)
+                        ? TradeStatus.WAITING_DIFFERENCE
+                        : TradeStatus.PREPARING_TRADE;
+                avanzarA(order, next,
+                        "Mock: USER habría enviado skins, bot las recibió");
+                marcarItemsComoBloqueados(order);
+                acreditarSaldoSiCorresponde(order);
+            }
+            return;
+        }
+
+        // CASO 3: PREPARING_TRADE → BOT_SENT
+        if (current == TradeStatus.PREPARING_TRADE && secondsSinceUpdate >= mockDelaySeconds) {
+            order.setBotTradeOfferId("MOCK-" + UUID.randomUUID().toString().substring(0, 8));
+            avanzarA(order, TradeStatus.BOT_SENT,
+                    "Mock: bot envió la oferta al usuario, esperando aceptación");
+            return;
+        }
+
+        // CASO 4: BOT_SENT → COMPLETED
+        if (current == TradeStatus.BOT_SENT && secondsSinceUpdate >= mockDelaySeconds) {
+            avanzarA(order, TradeStatus.COMPLETED,
+                    "Mock: usuario aceptó la oferta, operación completada");
+            return;
+        }
+
+        // CASO 5: RETURN_PENDING → RETURN_SENT
+        if (current == TradeStatus.RETURN_PENDING && secondsSinceUpdate >= mockDelaySeconds) {
+            order.setBotTradeOfferId("MOCK-RETURN-" + UUID.randomUUID().toString().substring(0, 8));
+            avanzarA(order, TradeStatus.RETURN_SENT,
+                    "Mock: bot envió la oferta de devolución");
+            return;
+        }
+
+        // CASO 6: RETURN_SENT → RETURNED
+        if (current == TradeStatus.RETURN_SENT && secondsSinceUpdate >= mockDelaySeconds) {
+            avanzarA(order, TradeStatus.RETURNED,
+                    "Mock: usuario aceptó la devolución, skins regresadas");
+            return;
+        }
+    }
+
+    private void avanzarA(Order order, TradeStatus next, String mensaje) {
+        TradeStatus prev = order.getTradeStatus();
+        order.setTradeStatus(next);
+        orderRepository.save(order);
+        if (next == TradeStatus.COMPLETED &&
+                (order.getOperationType() == OperationType.PURCHASE ||
+                        order.getOperationType() == OperationType.EXCHANGE)) {
+            marcarPublicacionesComoVendidas(order);
+            if (order.getOperationType() == OperationType.PURCHASE) {
+                marcarReservasComoEntregadas(order);
+                transferirSkinAlComprador(order);
+                acreditarSaldoVendedores(order);
+            }
+        }
+        System.out.println("[MOCK] Orden " + order.getId() + ": " + prev + " → " + next +
+                " (" + mensaje + ")");
+        // Reflejar en el archivo del bot
+        botFileService.updateStatus(order.getId(), next.name());
+    }
+
+    private boolean tieneSkinsBloqueadas(Order order) {
+        for (OrderDetail d : order.getOrderDetails()) {
+            if (d.getSkin() != null && d.getSkin().isLocked()) return true;
+        }
+        return false;
+    }
+
+    private void marcarPublicacionesComoVendidas(Order order) {
+        for (OrderDetail d : order.getOrderDetails()) {
+            Skin skin = d.getSkin();
+            if (skin == null) continue;
+            skin.setStock(0);
+            skin.setActive(false);
+            skin.setEstadoPublicacion(Skin.EstadoPublicacion.VENDIDA);
+        }
+    }
+
+    private void crearBotOrderParaCompra(Order order) {
+        BotTradeOrdersFileService.BotOrder bo = new BotTradeOrdersFileService.BotOrder();
+        bo.orderId = order.getId();
+        bo.operationType = OperationType.PURCHASE.name();
+        bo.status = "PAID_READY_TO_SEND";
+        bo.direction = "BOT_TO_USER";
+        bo.partnerSteamId64 = order.getUser().getSteamId64();
+        bo.partnerTradeUrl = order.getUser().getTradeUrl();
+        bo.assetIds = assetIdsDeCompra(order);
+        bo.mockMode = "true";
+        botFileService.upsert(bo);
+    }
+
+    private void asegurarItemsInventarioCompra(Order order) {
+        for (OrderDetail d : order.getOrderDetails()) {
+            Skin skin = d.getSkin();
+            if (skin == null) continue;
+
+            inventarioItemRepository
+                    .findByUserAndPendingOrderIdAndPendingSkinId(order.getUser(), order.getId(), skin.getId())
+                    .orElseGet(() -> {
+                        InventarioItem item = InventarioItem.builder()
+                                .user(order.getUser())
+                                .assetId(assetIdInventarioCompra(order, skin))
+                                .publicado(false)
+                                .build();
+                        item.setName(skin.getName());
+                        item.setMarketHashName(skin.getName());
+                        item.setIconUrl(skin.getImageUrl());
+                        item.setType(skin.getCatalogo() != null ? skin.getCatalogo().getCategoryName() : null);
+                        item.setCatalogo(skin.getCatalogo());
+                        item.setFechaSync(LocalDateTime.now());
+                        item.setInventoryStatus(InventarioItem.STATUS_PENDING_DELIVERY);
+                        item.setPendingOrderId(order.getId());
+                        item.setPendingSkinId(skin.getId());
+                        item.setPendingUntil(skin.getLockedUntil());
+                        item.setTradable(false);
+                        item.setMarketable(false);
+                        return inventarioItemRepository.save(item);
+                    });
+        }
+    }
+
+    private String assetIdInventarioCompra(Order order, Skin skin) {
+        if (skin.getSteamAssetId() != null && !skin.getSteamAssetId().isBlank()) {
+            return skin.getSteamAssetId();
+        }
+        return "PURCHASE-" + order.getId() + "-" + skin.getId();
+    }
+
+    private List<String> assetIdsDeCompra(Order order) {
+        List<String> assetIds = new java.util.ArrayList<>();
+        for (OrderDetail d : order.getOrderDetails()) {
+            if (d.getSkin() == null) continue;
+            String steamAssetId = d.getSkin().getSteamAssetId();
+            String assetId = (steamAssetId != null && !steamAssetId.isBlank())
+                    ? steamAssetId
+                    : "SKIN-" + d.getSkin().getId();
+            int quantity = d.getQuantity() != null ? d.getQuantity() : 1;
+            for (int i = 0; i < quantity; i++) {
+                assetIds.add(assetId);
+            }
+        }
+        return assetIds;
+    }
+
+    private void marcarReservasComoEntregadas(Order order) {
+        List<InventarioItem> pendientes = inventarioItemRepository.findByPendingOrderId(order.getId());
+        for (InventarioItem item : pendientes) {
+            if (!InventarioItem.STATUS_PENDING_DELIVERY.equals(item.getInventoryStatus())) continue;
+            item.setInventoryStatus(InventarioItem.STATUS_DELIVERED);
+            item.setDeliveredAt(LocalDateTime.now());
+            item.setPendingUntil(null);
+            item.setTradable(true);
+            item.setMarketable(true);
+            inventarioItemRepository.save(item);
+        }
+    }
+
+    private void marcarItemsComoBloqueados(Order order) {
+        if (order.getUserSkinAssetIds() == null) return;
+        // Parsear assetIds y marcar publicado=true en inventario para evitar reuso
+        // (no es estrictamente necesario porque findActiveOrdersWithAssetId ya bloquea,
+        // pero ayuda a la consistencia visual del inventario)
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper m = new com.fasterxml.jackson.databind.ObjectMapper();
+            List<String> ids = m.readValue(order.getUserSkinAssetIds(),
+                    new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+            for (String assetId : ids) {
+                inventarioItemRepository.findByUserAndAssetId(order.getUser(), assetId)
+                        .ifPresent(item -> {
+                            item.setPublicado(true);
+                            inventarioItemRepository.save(item);
+                        });
+            }
+        } catch (Exception e) {
+            System.err.println("[MOCK] No se pudieron bloquear items: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Cuando una compra (PURCHASE) se completa, crea una nueva publicación
+     * en estado PAUSADA para el comprador, de modo que la skin aparezca
+     * en "Mis publicaciones" y pueda volver a listarla cuando quiera.
+     */
+    private void transferirSkinAlComprador(Order order) {
+        // Usamos saldoAcreditado como guard: si ya se acreditó, la transferencia
+        // también ya ocurrió (ambas cosas se hacen juntas en el mismo ciclo).
+        if (Boolean.TRUE.equals(order.getSaldoAcreditado())) return;
+
+        User comprador = order.getUser();
+        if (comprador == null) return;
+
+        for (OrderDetail d : order.getOrderDetails()) {
+            Skin original = d.getSkin();
+            if (original == null) continue;
+
+            Skin nueva = new Skin();
+            nueva.setVendedor(comprador);
+            nueva.setCatalogo(original.getCatalogo());
+            nueva.setName(original.getName());
+            nueva.setDescription(original.getDescription());
+            nueva.setImageUrl(original.getImageUrl());
+            nueva.setGame(original.getGame() != null ? original.getGame() : "CS2");
+            nueva.setExterior(original.getExterior());
+            nueva.setRareza(original.getRareza());
+            nueva.setStattrak(Boolean.TRUE.equals(original.getStattrak()));
+            nueva.setPrice(d.getUnitPrice() != null ? d.getUnitPrice() : original.getPrice());
+            nueva.setDiscount(0.0);
+            nueva.setStock(1);
+            nueva.setActive(false);
+            nueva.setEstadoPublicacion(Skin.EstadoPublicacion.PAUSADA);
+            nueva.setIntercambiable(true);
+            nueva.setVendible(true);
+            nueva.setFechaAlta(LocalDateTime.now());
+            skinRepository.save(nueva);
+
+            System.out.println("[MOCK] Skin transferida al comprador " + comprador.getEmail() +
+                    ": " + original.getName() + " (orden " + order.getId() + ")");
+        }
+    }
+
+    /**
+     * Cuando una compra (PURCHASE) se completa, acredita el precio de venta al
+     * saldo interno de cada vendedor.
+     *
+     * Con credenciales de producción esto debería disparar también una
+     * transferencia real al aliasCobro del vendedor. Por ahora es ficticio.
+     */
+    private void acreditarSaldoVendedores(Order order) {
+        if (Boolean.TRUE.equals(order.getSaldoAcreditado())) return;
+
+        for (OrderDetail d : order.getOrderDetails()) {
+            Skin skin = d.getSkin();
+            if (skin == null || skin.getVendedor() == null) continue;
+            double precio = d.getUnitPrice() != null ? d.getUnitPrice() : 0.0;
+            if (precio <= 0) continue;
+
+            User vendedor = userRepository.findById(skin.getVendedor().getId()).orElse(null);
+            if (vendedor == null) continue;
+
+            double saldoActual = vendedor.getSaldo() != null ? vendedor.getSaldo() : 0.0;
+            vendedor.setSaldo(saldoActual + precio);
+            userRepository.save(vendedor);
+
+            System.out.println("[MOCK] Saldo acreditado a vendedor " + vendedor.getEmail() +
+                    ": +" + precio + " (orden " + order.getId() + ")");
+        }
+
+        order.setSaldoAcreditado(true);
+        orderRepository.save(order);
+    }
+
+    private void acreditarSaldoSiCorresponde(Order order) {
+        if (order.getOperationType() != OperationType.EXCHANGE) return;
+        if (Boolean.TRUE.equals(order.getSaldoAcreditado())) return;
+        if (order.getPriceDifference() == null || order.getPriceDifference() >= 0) return;
+
+        var user = order.getUser();
+        double saldoActual = user.getSaldo() != null ? user.getSaldo() : 0.0;
+        user.setSaldo(saldoActual + Math.abs(order.getPriceDifference()));
+        order.setSaldoAcreditado(true);
+        userRepository.save(user);
+        orderRepository.save(order);
+    }
+
+    private long secondsSince(LocalDateTime when) {
+        if (when == null) return Long.MAX_VALUE;
+        return ChronoUnit.SECONDS.between(when, LocalDateTime.now());
+    }
+}
