@@ -36,7 +36,7 @@ public class CarritoController {
     public ResponseEntity<?> verCarrito(Authentication auth) {
         String email = auth.getName();
         Carrito carrito = carritoService.obtenerOCrearCarrito(email);
-        return ResponseEntity.ok(ApiResponse.of("Carrito del usuario", carrito));
+        return ResponseEntity.ok(ApiResponse.of("Carrito del usuario", CarritoResponse.from(carrito)));
     }
 
     /**
@@ -52,7 +52,7 @@ public class CarritoController {
 
         String email = auth.getName();
         Carrito carrito = carritoService.agregarSkin(email, skinId, cantidad);
-        return ResponseEntity.ok(ApiResponse.of("Skin agregada al carrito", carrito));
+        return ResponseEntity.ok(ApiResponse.of("Skin agregada al carrito", CarritoResponse.from(carrito)));
     }
 
     /**
@@ -67,7 +67,7 @@ public class CarritoController {
 
         String email = auth.getName();
         Carrito carrito = carritoService.modificarCantidad(email, itemId, cantidad);
-        return ResponseEntity.ok(ApiResponse.of("Cantidad del ítem actualizada", carrito));
+        return ResponseEntity.ok(ApiResponse.of("Cantidad del ítem actualizada", CarritoResponse.from(carrito)));
     }
 
     /**
@@ -81,7 +81,7 @@ public class CarritoController {
 
         String email = auth.getName();
         Carrito carrito = carritoService.eliminarItem(email, itemId);
-        return ResponseEntity.ok(ApiResponse.of("Ítem eliminado del carrito", carrito));
+        return ResponseEntity.ok(ApiResponse.of("Ítem eliminado del carrito", CarritoResponse.from(carrito)));
     }
 
     /**
@@ -92,6 +92,6 @@ public class CarritoController {
     public ResponseEntity<?> vaciarCarrito(Authentication auth) {
         String email = auth.getName();
         Carrito carrito = carritoService.vaciar(email);
-        return ResponseEntity.ok(ApiResponse.of("Carrito vaciado correctamente", carrito));
+        return ResponseEntity.ok(ApiResponse.of("Carrito vaciado correctamente", CarritoResponse.from(carrito)));
     }
 }

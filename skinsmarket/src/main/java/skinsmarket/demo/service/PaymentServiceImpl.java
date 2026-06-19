@@ -392,7 +392,7 @@ public class PaymentServiceImpl implements PaymentService {
         order.setPaymentStatus(newStatus);
         orderRepository.save(order);
 
-        if (esPagoFallidoOCerrado(newStatus) && "PAID".equals(previousStatus)) {
+        if (esPagoFallidoOCerrado(newStatus) && !esPagoFallidoOCerrado(previousStatus)) {
             liberarPublicacionesReservadas(order);
         }
 
@@ -483,11 +483,15 @@ public class PaymentServiceImpl implements PaymentService {
         if (Boolean.FALSE.equals(skin.getVendible())) {
             throw new RuntimeException("La skin no está habilitada para compra directa");
         }
-        if (skin.getEstadoPublicacion() != null &&
-                skin.getEstadoPublicacion() != Skin.EstadoPublicacion.PUBLICADA) {
-            throw new RuntimeException("La skin ya fue reservada o vendida");
-        }
-        if (skin.getStock() == null || skin.getStock() < 1) {
+        Skin.EstadoPublicacion estado = skin.getEstadoPublicacion();
+        boolean publicadaConStock = (estado == null || estado == Skin.EstadoPublicacion.PUBLICADA)
+                && skin.getStock() != null
+                && skin.getStock() >= 1;
+        boolean reservadaPorCheckout = estado == Skin.EstadoPublicacion.RESERVADA
+                && skin.getStock() != null
+                && skin.getStock() == 0;
+
+        if (!publicadaConStock && !reservadaPorCheckout) {
             throw new RuntimeException("La skin ya fue reservada o vendida");
         }
     }

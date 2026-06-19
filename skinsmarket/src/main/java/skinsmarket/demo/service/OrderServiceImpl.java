@@ -113,6 +113,10 @@ public class OrderServiceImpl implements OrderService {
             if (Boolean.FALSE.equals(skin.getVendible())) {
                 throw new RuntimeException("La skin '" + skin.getName() + "' no está habilitada para compra directa");
             }
+            if (skin.getEstadoPublicacion() != null &&
+                    skin.getEstadoPublicacion() != Skin.EstadoPublicacion.PUBLICADA) {
+                throw new RuntimeException("La skin '" + skin.getName() + "' ya fue reservada o vendida");
+            }
             if (skin.getVendedor() != null
                     && skin.getVendedor().getEmail().equals(user.getEmail())) {
                 throw new PropietarioSkinException();
@@ -141,6 +145,7 @@ public class OrderServiceImpl implements OrderService {
             detailResponses.add(detailResponse);
 
             totalPrice += finalPrice;
+            reservarPublicacionParaCheckout(skin);
         }
 
         double descuentoAplicado = 0.0;
@@ -193,6 +198,12 @@ public class OrderServiceImpl implements OrderService {
             throw new RuntimeException(
                     "La skin '" + skin.getName() + "' no está disponible para compra hasta que el vendedor configure su Steam Trade URL y alias de cobro.");
         }
+    }
+
+    private void reservarPublicacionParaCheckout(Skin skin) {
+        skin.setStock(0);
+        skin.setEstadoPublicacion(Skin.EstadoPublicacion.RESERVADA);
+        skinRepository.save(skin);
     }
 
     @Override

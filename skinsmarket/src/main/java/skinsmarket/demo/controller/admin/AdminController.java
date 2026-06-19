@@ -155,6 +155,10 @@ public class AdminController {
                 .userEmail(userEmail)
                 .totalAmount(BigDecimal.valueOf(order.getTotalPrice()))
                 .creationDate(order.getDate())
+                .status(order.getPaymentStatus())
+                .paymentStatus(order.getPaymentStatus())
+                .tradeStatus(order.getTradeStatus() != null ? order.getTradeStatus().name() : null)
+                .operationType(order.getOperationType() != null ? order.getOperationType().name() : null)
                 .build();
     }
 }

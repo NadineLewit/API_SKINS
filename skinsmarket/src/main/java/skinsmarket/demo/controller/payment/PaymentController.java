@@ -114,7 +114,7 @@ public class PaymentController {
 
     @GetMapping("/return/success")
     public ResponseEntity<?> successReturn() {
-        return ResponseEntity.ok(ApiResponse.of("Pago aprobado. La confirmacion final se procesa por webhook."));
+        return ResponseEntity.ok(ApiResponse.of("Pago aprobado. La confirmación final se procesa por webhook."));
     }
 
     @GetMapping("/return/failure")
@@ -124,7 +124,7 @@ public class PaymentController {
 
     @GetMapping("/return/pending")
     public ResponseEntity<?> pendingReturn() {
-        return ResponseEntity.ok(ApiResponse.of("Pago pendiente. La confirmacion final se procesa por webhook."));
+        return ResponseEntity.ok(ApiResponse.of("Pago pendiente. La confirmación final se procesa por webhook."));
     }
 
     private ResponseEntity<?> mercadoPagoError(Exception e) {

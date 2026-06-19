@@ -38,4 +38,10 @@ public class AdminOrderResponse {
     // Estado de la orden (ej: "PENDIENTE", "COMPLETADA", "CANCELADA")
     // Opcional: se puede usar null si el sistema no maneja estados de orden
     private String status;
+
+    private String paymentStatus;
+
+    private String tradeStatus;
+
+    private String operationType;
 }

@@ -20,7 +20,7 @@ public class SaleRequest {
 
     /**
      * Precio total que el USER pide por todas las skins.
-     * El admin/sistema decide después si lo acepta o no (en este TPO lo aceptamos siempre).
+     * El admin/sistema decide después si lo acepta o no.
      */
     private Double precioOfrecido;
 }

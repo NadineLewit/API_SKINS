@@ -28,4 +28,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * Usado en el registro para verificar que el username no esté ya en uso.
      */
     Optional<User> findByUsername(String username);
+
+    Optional<User> findBySteamId64(String steamId64);
 }

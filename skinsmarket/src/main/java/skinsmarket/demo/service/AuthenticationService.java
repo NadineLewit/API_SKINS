@@ -15,14 +15,22 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import skinsmarket.demo.controller.auth.AuthenticationRequest;
 import skinsmarket.demo.controller.auth.AuthenticationResponse;
 import skinsmarket.demo.controller.auth.ForgotPasswordRequest;
 import skinsmarket.demo.controller.auth.ResetPasswordRequest;
+import skinsmarket.demo.controller.auth.SteamAuthResult;
 import skinsmarket.demo.controller.auth.VerifyEmailRequest;
 import skinsmarket.demo.controller.config.RegisterRequest;
 import skinsmarket.demo.controller.config.JwtService;
@@ -32,12 +40,15 @@ import skinsmarket.demo.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 
 import java.net.URLEncoder;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Servicio de autenticación: registro e inicio de sesión con JWT.
@@ -59,13 +70,29 @@ public class AuthenticationService {
     private final PasswordEncoder     passwordEncoder;
     private final JwtService          jwtService;
     private final AuthenticationManager authenticationManager;
+    private final RestTemplate restTemplate;
     private final SecureRandom secureRandom = new SecureRandom();
+    private static final String STEAM_OPENID_URL = "https://steamcommunity.com/openid/login";
+    private static final String OPENID_NS = "http://specs.openid.net/auth/2.0";
+    private static final String OPENID_IDENTIFIER_SELECT =
+            "http://specs.openid.net/auth/2.0/identifier_select";
+    private static final Pattern STEAM_ID_PATTERN =
+            Pattern.compile("https?://steamcommunity\\.com/openid/id/(\\d{17})");
 
     @Value("${application.frontend.reset-password-url:http://localhost:5173/reset-password}")
     private String resetPasswordUrl;
 
     @Value("${application.frontend.verify-email-url:http://localhost:5173/verify-email}")
     private String verifyEmailUrl;
+
+    @Value("${application.frontend.steam-callback-url:http://localhost:5173/login/steam/callback}")
+    private String steamFrontendCallbackUrl;
+
+    @Value("${application.backend.steam-callback-url:http://localhost:4003/api/v1/auth/steam/callback}")
+    private String steamBackendCallbackUrl;
+
+    @Value("${application.steam.openid.realm:http://localhost:4003}")
+    private String steamOpenIdRealm;
 
     /**
      * Registra un nuevo usuario en el marketplace de skins.
@@ -169,6 +196,90 @@ public class AuthenticationService {
         return AuthenticationResponse.builder()
                 .accessToken(jwtToken)
                 .build();
+    }
+
+    public String buildSteamLoginUrl(String redirectUrl) {
+        String safeRedirectUrl = resolveSteamFrontendRedirect(redirectUrl);
+        String returnTo = UriComponentsBuilder
+                .fromUriString(steamBackendCallbackUrl)
+                .queryParam("redirectUrl", safeRedirectUrl)
+                .build()
+                .encode(StandardCharsets.UTF_8)
+                .toUriString();
+
+        return UriComponentsBuilder
+                .fromUriString(STEAM_OPENID_URL)
+                .queryParam("openid.ns", OPENID_NS)
+                .queryParam("openid.mode", "checkid_setup")
+                .queryParam("openid.return_to", returnTo)
+                .queryParam("openid.realm", steamOpenIdRealm)
+                .queryParam("openid.identity", OPENID_IDENTIFIER_SELECT)
+                .queryParam("openid.claimed_id", OPENID_IDENTIFIER_SELECT)
+                .build()
+                .encode(StandardCharsets.UTF_8)
+                .toUriString();
+    }
+
+    public String resolveSteamFrontendRedirect(String redirectUrl) {
+        if (isBlank(redirectUrl)) {
+            return steamFrontendCallbackUrl;
+        }
+
+        String normalized = redirectUrl.trim();
+        if (normalized.startsWith("http://localhost:5173/")
+                || normalized.startsWith("http://127.0.0.1:5173/")) {
+            return normalized;
+        }
+
+        throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Redirect URL de Steam no permitida.");
+    }
+
+    @Transactional
+    public SteamAuthResult authenticateWithSteam(MultiValueMap<String, String> params) {
+        if (params == null || !"id_res".equals(params.getFirst("openid.mode"))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Respuesta de Steam invalida");
+        }
+
+        String steamId64 = extractSteamId64(params.getFirst("openid.claimed_id"));
+
+        if (!verifySteamOpenId(params)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Steam no pudo validar el login");
+        }
+
+        User user = userRepository.findBySteamId64(steamId64)
+                .orElseGet(() -> createSteamUser(steamId64));
+        String jwtToken = jwtService.generateToken(user);
+
+        return new SteamAuthResult(
+                AuthenticationResponse.builder()
+                        .accessToken(jwtToken)
+                        .build(),
+                steamId64);
+    }
+
+    public URI buildSteamSuccessRedirect(String redirectUrl, SteamAuthResult result) {
+        return UriComponentsBuilder
+                .fromUriString(redirectUrl)
+                .queryParam("token", result.getAuthentication().getAccessToken())
+                .queryParam("steamId64", result.getSteamId64())
+                .build()
+                .encode(StandardCharsets.UTF_8)
+                .toUri();
+    }
+
+    public URI buildSteamErrorRedirect(String redirectUrl, String message) {
+        String safeMessage = isBlank(message)
+                ? "No se pudo iniciar sesion con Steam."
+                : message;
+
+        return UriComponentsBuilder
+                .fromUriString(redirectUrl)
+                .queryParam("error", safeMessage)
+                .build()
+                .encode(StandardCharsets.UTF_8)
+                .toUri();
     }
 
     @Transactional
@@ -290,6 +401,77 @@ public class AuthenticationService {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private boolean verifySteamOpenId(MultiValueMap<String, String> params) {
+        LinkedMultiValueMap<String, String> verificationParams = new LinkedMultiValueMap<>();
+        params.forEach((key, values) -> {
+            if (key.startsWith("openid.")) {
+                verificationParams.put(key, values);
+            }
+        });
+        verificationParams.set("openid.mode", "check_authentication");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+
+        String response = restTemplate.postForObject(
+                STEAM_OPENID_URL,
+                new HttpEntity<>(verificationParams, headers),
+                String.class);
+
+        return response != null && response.contains("is_valid:true");
+    }
+
+    private String extractSteamId64(String claimedId) {
+        if (isBlank(claimedId)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Steam no devolvio SteamID64");
+        }
+
+        Matcher matcher = STEAM_ID_PATTERN.matcher(claimedId.trim());
+        if (!matcher.matches()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "SteamID64 invalido en la respuesta de Steam");
+        }
+
+        return matcher.group(1);
+    }
+
+    private User createSteamUser(String steamId64) {
+        String username = buildUniqueSteamUsername(steamId64);
+        User user = User.builder()
+                .username(username)
+                .firstName("Steam")
+                .lastName("User")
+                .email("steam_" + steamId64 + "@steam.local")
+                .password(passwordEncoder.encode(generateToken()))
+                .emailVerified(true)
+                .role(Role.USER)
+                .steamId64(steamId64)
+                .build();
+
+        User savedUser = userRepository.save(user);
+        carritoRepository.findByUser(savedUser).orElseGet(() -> {
+            Carrito carrito = new Carrito();
+            carrito.setUser(savedUser);
+            carrito.setEstado(Carrito.Estado.VACIO);
+            return carritoRepository.save(carrito);
+        });
+
+        return savedUser;
+    }
+
+    private String buildUniqueSteamUsername(String steamId64) {
+        String suffix = steamId64.substring(Math.max(0, steamId64.length() - 8));
+        String baseUsername = "steam_" + suffix;
+        String username = baseUsername;
+        int attempt = 1;
+
+        while (userRepository.findByUsername(username).isPresent()) {
+            username = baseUsername + "_" + attempt;
+            attempt++;
+        }
+
+        return username;
     }
 
     private String generateToken() {

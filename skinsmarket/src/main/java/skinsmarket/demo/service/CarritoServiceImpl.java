@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 /**
  * Implementación del servicio de Carrito de compras.
  *
- * Usa @Autowired en atributos y @Transactional, igual que los servicios del TPO.
+ * Usa @Autowired en atributos y @Transactional dentro de la capa de servicios.
  *
  * Lógica principal: el carrito persiste entre sesiones. Cada usuario tiene
  * exactamente un carrito que se crea la primera vez que accede.
@@ -43,16 +43,32 @@ public class CarritoServiceImpl implements CarritoService {
      * Es el punto de entrada de todos los demás métodos.
      */
     @Override
+    @Transactional
     public Carrito obtenerOCrearCarrito(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado: " + email));
 
         // Buscar el carrito existente, o crear uno nuevo si es la primera vez
-        return carritoRepository.findByUser(user).orElseGet(() -> {
+        Carrito carrito = carritoRepository.findByUser(user).orElseGet(() -> {
             Carrito nuevo = new Carrito();
             nuevo.setUser(user);
             nuevo.setEstado(Carrito.Estado.VACIO);
             return carritoRepository.save(nuevo);
+        });
+
+        inicializarItems(carrito);
+        return carrito;
+    }
+
+    private void inicializarItems(Carrito carrito) {
+        carrito.getItems().forEach(item -> {
+            Skin skin = item.getSkin();
+            if (skin != null) {
+                skin.getId();
+                if (skin.getCatalogo() != null) {
+                    skin.getCatalogo().getId();
+                }
+            }
         });
     }
 

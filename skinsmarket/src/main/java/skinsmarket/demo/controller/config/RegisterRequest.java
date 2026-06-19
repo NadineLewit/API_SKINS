@@ -18,13 +18,13 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class RegisterRequest {
 
-    // Nombre de usuario único (requerido por el TPO - "nombre de usuario")
+    // Nombre de usuario único requerido en el formulario de registro.
     private String username;
 
-    // Nombre del usuario (requerido por el TPO - "nombre")
+    // Nombre del usuario.
     private String firstName;
 
-    // Apellido del usuario (requerido por el TPO - "apellido")
+    // Apellido del usuario.
     private String lastName;
 
     // Email único del usuario, usado como identificador para el login

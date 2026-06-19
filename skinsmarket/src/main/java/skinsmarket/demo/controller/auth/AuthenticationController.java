@@ -3,14 +3,21 @@ package skinsmarket.demo.controller.auth;
 import skinsmarket.demo.controller.common.ApiResponse;
 import skinsmarket.demo.exception.EmailException;
 import skinsmarket.demo.exception.PasswordException;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import skinsmarket.demo.service.AuthenticationService;
 
 import lombok.RequiredArgsConstructor;
+
+import java.net.URI;
 
 /**
  * Controlador REST para la autenticación de usuarios.
@@ -59,6 +66,32 @@ public class AuthenticationController {
     public ResponseEntity<AuthenticationResponse> authenticate(
             @RequestBody AuthenticationRequest request) {
         return ResponseEntity.ok(service.authenticate(request));
+    }
+
+    @GetMapping("/steam/login-url")
+    public ResponseEntity<ApiResponse<SteamLoginUrlResponse>> steamLoginUrl(
+            @RequestParam(required = false) String redirectUrl) {
+        return ResponseEntity.ok(ApiResponse.of(
+                "URL de login con Steam generada correctamente.",
+                new SteamLoginUrlResponse(service.buildSteamLoginUrl(redirectUrl))));
+    }
+
+    @GetMapping("/steam/callback")
+    public ResponseEntity<Void> steamCallback(@RequestParam MultiValueMap<String, String> params) {
+        String redirectUrl = service.resolveSteamFrontendRedirect(params.getFirst("redirectUrl"));
+
+        try {
+            SteamAuthResult result = service.authenticateWithSteam(params);
+            URI location = service.buildSteamSuccessRedirect(redirectUrl, result);
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .header(HttpHeaders.LOCATION, location.toString())
+                    .build();
+        } catch (Exception error) {
+            URI location = service.buildSteamErrorRedirect(redirectUrl, error.getMessage());
+            return ResponseEntity.status(HttpStatus.FOUND)
+                    .header(HttpHeaders.LOCATION, location.toString())
+                    .build();
+        }
     }
 
     /**
