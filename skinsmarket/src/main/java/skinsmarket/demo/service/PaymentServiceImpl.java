@@ -16,6 +16,7 @@ import com.mercadopago.net.MPSearchRequest;
 import com.mercadopago.resources.payment.Payment;
 import com.mercadopago.resources.payment.PaymentStatus;
 import com.mercadopago.resources.preference.Preference;
+import jakarta.annotation.PostConstruct;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -112,6 +113,12 @@ public class PaymentServiceImpl implements PaymentService {
     @Value("${mercadopago.public-key}")
     private String publicKey;
 
+    @Value("${mercadopago.sandbox-access-token:}")
+    private String sandboxAccessToken;
+
+    @Value("${mercadopago.sandbox-public-key:}")
+    private String sandboxPublicKey;
+
     @Value("${mercadopago.backend-url}")
     private String backendUrl;
 
@@ -123,6 +130,16 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Value("${mock.enabled:true}")
     private boolean mockEnabled;
+
+    @PostConstruct
+    void useSharedSandboxCredentialsWhenConfiguredValuesArePlaceholders() {
+        if (isPlaceholderCredential(accessToken) && sandboxAccessToken != null && !sandboxAccessToken.isBlank()) {
+            accessToken = sandboxAccessToken;
+        }
+        if (isPlaceholderCredential(publicKey) && sandboxPublicKey != null && !sandboxPublicKey.isBlank()) {
+            publicKey = sandboxPublicKey;
+        }
+    }
 
     @Override
     @Transactional(rollbackOn = Exception.class)
@@ -472,8 +489,9 @@ public class PaymentServiceImpl implements PaymentService {
 
         MercadoPagoConfig.setAccessToken(accessToken);
 
+        List<String> pendingStatuses = List.of("PENDING_PAYMENT", "IN_PROCESS");
         List<Order> pendingOrders = orderRepository
-                .findByUserEmailAndPaymentStatusOrderByDateDesc(email, "PENDING_PAYMENT");
+                .findByUserEmailAndPaymentStatusInOrderByDateDesc(email, pendingStatuses);
 
         BrickPaymentResponse latestResponse = null;
         for (Order pendingOrder : pendingOrders) {
@@ -855,7 +873,11 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private boolean hasPlaceholderTestCredentials() {
-        return accessToken.matches("TEST-[0-]+") || publicKey.matches("TEST-[0-]+");
+        return isPlaceholderCredential(accessToken) || isPlaceholderCredential(publicKey);
+    }
+
+    private boolean isPlaceholderCredential(String credential) {
+        return credential != null && credential.matches("TEST-[0-]+");
     }
 
     private void validateTestCardData(TestCardPaymentRequest request, String authenticatedEmail) {

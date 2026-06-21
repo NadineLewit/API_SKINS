@@ -52,7 +52,10 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     List<Order> findPaidPurchasesForSeller(@Param("sellerId") Long sellerId);
 
     /** Órdenes pendientes de pago de un usuario, de más reciente a más antigua. */
-    List<Order> findByUserEmailAndPaymentStatusOrderByDateDesc(String email, String paymentStatus);
+    List<Order> findByUserEmailAndPaymentStatusInOrderByDateDesc(
+            String email,
+            List<String> paymentStatuses
+    );
 
     /** Verifica si una orden pertenece a un usuario. */
     boolean existsByIdAndUserId(Long id, Long userId);

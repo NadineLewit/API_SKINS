@@ -32,4 +32,7 @@ build/
 ### VS Code ###
 .vscode/
 
+### Runtime logs ###
+*.log
+
 src/main/resources/application.properties
