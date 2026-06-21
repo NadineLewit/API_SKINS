@@ -30,11 +30,18 @@ public class UserResponse {
     // Saldo a favor generado por intercambios donde el usuario entrega más valor
     private Double saldo;
 
+    // Cotización usada para mostrar el saldo interno en pesos argentinos
+    private Double usdToArs;
+
     // Rol actual. El front lo usa para mostrar herramientas admin de desarrollo.
     private Role role;
 
     // SteamID64 (puede ser null si el usuario no lo configuró)
     private String steamId64;
+
+    // Datos públicos obtenidos desde el perfil de Steam
+    private String steamUsername;
+    private String steamAvatarUrl;
 
     // Trade URL de Steam (puede ser null)
     private String tradeUrl;

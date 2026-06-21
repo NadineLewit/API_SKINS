@@ -82,6 +82,35 @@ public class PaymentController {
         }
     }
 
+    @PostMapping("/bricks/orders/{orderId}/process-balance")
+    public ResponseEntity<?> processBalancePayment(
+            Authentication auth,
+            @PathVariable Long orderId) {
+        try {
+            BrickPaymentResponse response =
+                    paymentService.processBalancePayment(auth.getName(), orderId);
+            return ResponseEntity.status(201)
+                    .body(ApiResponse.of("Compra pagada con saldo", response));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(ApiResponse.of(e.getMessage()));
+        }
+    }
+
+    @PostMapping("/bricks/balance/process-test-card")
+    public ResponseEntity<?> processBalanceTopUpTestCard(
+            Authentication auth,
+            @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey,
+            @RequestBody(required = false) BalanceTopUpPaymentRequest request) {
+        try {
+            BrickPaymentResponse response =
+                    paymentService.processBalanceTopUpTestCard(auth.getName(), request, idempotencyKey);
+            return ResponseEntity.status(201)
+                    .body(ApiResponse.of("Recarga procesada por Mercado Pago", response));
+        } catch (Exception e) {
+            return mercadoPagoError(e);
+        }
+    }
+
     @PostMapping("/bricks/orders/{orderId}/sync")
     public ResponseEntity<?> syncPaymentStatus(Authentication auth, @PathVariable Long orderId) {
         try {

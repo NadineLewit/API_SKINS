@@ -8,6 +8,7 @@ import com.mercadopago.client.payment.PaymentPayerRequest;
 import com.mercadopago.client.preference.PreferenceBackUrlsRequest;
 import com.mercadopago.client.preference.PreferenceClient;
 import com.mercadopago.client.preference.PreferenceItemRequest;
+import com.mercadopago.client.preference.PreferencePayerRequest;
 import com.mercadopago.client.preference.PreferenceRequest;
 import com.mercadopago.core.MPRequestOptions;
 import com.mercadopago.net.MPResultsResourcesPage;
@@ -30,6 +31,7 @@ import skinsmarket.demo.controller.order.OrderResponse;
 import skinsmarket.demo.controller.payment.BrickPaymentRequest;
 import skinsmarket.demo.controller.payment.BrickPaymentResponse;
 import skinsmarket.demo.controller.payment.BrickPreferenceResponse;
+import skinsmarket.demo.controller.payment.BalanceTopUpPaymentRequest;
 import skinsmarket.demo.controller.payment.MercadoPagoWebhookRequest;
 import skinsmarket.demo.controller.payment.TestCardPaymentRequest;
 import skinsmarket.demo.entity.InventarioItem;
@@ -38,9 +40,11 @@ import skinsmarket.demo.entity.Order;
 import skinsmarket.demo.entity.OrderDetail;
 import skinsmarket.demo.entity.Skin;
 import skinsmarket.demo.entity.TradeStatus;
+import skinsmarket.demo.entity.User;
 import skinsmarket.demo.repository.InventarioItemRepository;
 import skinsmarket.demo.repository.OrderRepository;
 import skinsmarket.demo.repository.SkinRepository;
+import skinsmarket.demo.repository.UserRepository;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -94,6 +98,9 @@ public class PaymentServiceImpl implements PaymentService {
     private SkinRepository skinRepository;
 
     @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
     private EventoService eventoService;
 
     @Autowired
@@ -110,6 +117,12 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Value("${mercadopago.currency-id}")
     private String currencyId;
+
+    @Value("${application.balance.usd-to-ars:1451.02}")
+    private double usdToArs;
+
+    @Value("${mock.enabled:true}")
+    private boolean mockEnabled;
 
     @Override
     @Transactional(rollbackOn = Exception.class)
@@ -134,8 +147,28 @@ public class PaymentServiceImpl implements PaymentService {
         if (!order.getUser().getEmail().equals(email)) {
             throw new RuntimeException("La orden no pertenece al usuario autenticado");
         }
+        if ("PAID".equals(order.getPaymentStatus())) {
+            throw new RuntimeException("La orden ya fue pagada");
+        }
         validatePayableOrder(order);
         validarPublicacionesDisponiblesParaPago(order);
+
+        if (mockEnabled && hasPlaceholderTestCredentials()) {
+            String localPreferenceId = "LOCAL-" + order.getId();
+            order.setPaymentStatus("PENDING_PAYMENT");
+            order.setMercadopagoPreferenceId(localPreferenceId);
+            orderRepository.save(order);
+            return new BrickPreferenceResponse(
+                    mapToOrderResponse(order),
+                    localPreferenceId,
+                    publicKey,
+                    order.getPaymentStatus(),
+                    null,
+                    null,
+                    null,
+                    "local"
+            );
+        }
 
         MercadoPagoConfig.setAccessToken(accessToken);
 
@@ -154,13 +187,22 @@ public class PaymentServiceImpl implements PaymentService {
                 .pending(backendUrl + "/payments/return/pending")
                 .build();
 
-        PreferenceRequest preferenceRequest = PreferenceRequest.builder()
+        PreferencePayerRequest payer = PreferencePayerRequest.builder()
+                .email(order.getUser().getEmail())
+                .build();
+
+        PreferenceRequest.PreferenceRequestBuilder preferenceBuilder = PreferenceRequest.builder()
                 .items(List.of(item))
+                .payer(payer)
                 .externalReference(order.getId().toString())
                 .backUrls(backUrls)
-                .purpose("wallet_purchase")
-                .notificationUrl(backendUrl + "/payments/webhook")
-                .build();
+                .purpose("wallet_purchase");
+
+        if (isPublicHttpsBackendUrl()) {
+            preferenceBuilder.notificationUrl(backendUrl + "/payments/webhook");
+        }
+
+        PreferenceRequest preferenceRequest = preferenceBuilder.build();
 
         Preference preference = new PreferenceClient().create(preferenceRequest);
 
@@ -189,11 +231,14 @@ public class PaymentServiceImpl implements PaymentService {
             String idempotencyKey) throws Exception {
         ensureConfigured();
 
-        Order order = orderRepository.findById(orderId)
+        Order order = orderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new RuntimeException("Orden no encontrada: " + orderId));
 
         if (!order.getUser().getEmail().equals(email)) {
             throw new RuntimeException("La orden no pertenece al usuario autenticado");
+        }
+        if ("PAID".equals(order.getPaymentStatus())) {
+            return approvedExistingPaymentResponse(order);
         }
         if (request == null) {
             throw new RuntimeException("Faltan los datos del pago enviados por Payment Brick");
@@ -257,6 +302,11 @@ public class PaymentServiceImpl implements PaymentService {
         if (!MERCADO_PAGO_TEST_CARDS.contains(cardNumber)) {
             throw new RuntimeException("Usa una tarjeta de prueba oficial de Mercado Pago");
         }
+        validateTestCardData(request, email);
+
+        if (mockEnabled && hasPlaceholderTestCredentials()) {
+            return processLocalTestCardPayment(email, orderId, request, cardNumber);
+        }
 
         String token = createTestCardToken(request, cardNumber);
         BrickPaymentRequest brickRequest = new BrickPaymentRequest();
@@ -281,6 +331,80 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Override
+    @Transactional
+    public BrickPaymentResponse processBalancePayment(String email, Long orderId) {
+        Order order = orderRepository.findByIdForUpdate(orderId)
+                .orElseThrow(() -> new RuntimeException("Orden no encontrada: " + orderId));
+        User user = userRepository.findByEmailForUpdate(email)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        if (!order.getUser().getId().equals(user.getId())) {
+            throw new RuntimeException("La orden no pertenece al usuario autenticado");
+        }
+        if ("PAID".equals(order.getPaymentStatus())) {
+            return approvedBalanceResponse(order);
+        }
+        if (order.getMercadopagoPreferenceId() != null
+                && "PENDING_PAYMENT".equals(order.getPaymentStatus())) {
+            throw new RuntimeException("Ya iniciaste el pago con Mercado Pago para esta orden");
+        }
+
+        validatePayableOrder(order);
+        validarPublicacionesDisponiblesParaPago(order);
+
+        double total = roundMoney(paymentAmount(order));
+        double balance = roundMoney(user.getSaldo() != null ? user.getSaldo() : 0.0);
+        if (balance < total) {
+            throw new RuntimeException(String.format(
+                    "Saldo insuficiente. Te faltan $%.2f USD.", roundMoney(total - balance)));
+        }
+
+        user.setSaldo(roundMoney(balance - total));
+        userRepository.save(user);
+        updateOrderPaymentState(order, null, "PAID");
+        return approvedBalanceResponse(order);
+    }
+
+    @Override
+    @Transactional(rollbackOn = Exception.class)
+    public BrickPaymentResponse processBalanceTopUpTestCard(
+            String email,
+            BalanceTopUpPaymentRequest request,
+            String idempotencyKey) throws Exception {
+        if (request == null || request.getAmountArs() == null) {
+            throw new RuntimeException("El importe de la recarga es obligatorio");
+        }
+
+        double amountArs = request.getAmountArs();
+        double maxAmountArs = usdToArs * 3000.0;
+        if (!Double.isFinite(amountArs) || amountArs < 1500.0 || amountArs > maxAmountArs) {
+            throw new RuntimeException(
+                    "El importe debe estar entre ARS 1.500 y ARS " + Math.round(maxAmountArs));
+        }
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        double amountUsd = BigDecimal.valueOf(amountArs / usdToArs)
+                .setScale(2, RoundingMode.HALF_UP)
+                .doubleValue();
+
+        Order order = new Order();
+        order.setUser(user);
+        order.setDate(LocalDateTime.now());
+        order.setTotalPrice(amountArs);
+        order.setDescuentoAplicado(0.0);
+        order.setTotalFinal(amountArs);
+        order.setPaymentStatus("PENDING_PAYMENT");
+        order.setOperationType(OperationType.BALANCE_TOP_UP);
+        order.setTradeStatus(TradeStatus.WAITING_PAYMENT);
+        order.setPriceDifference(amountUsd);
+        order.setSaldoAcreditado(false);
+        orderRepository.save(order);
+
+        return processTestCardPayment(email, order.getId(), request, idempotencyKey);
+    }
+
+    @Override
     @Transactional(rollbackOn = Exception.class)
     public BrickPaymentResponse syncPaymentStatus(String email, Long orderId) throws Exception {
         ensureConfigured();
@@ -290,6 +414,18 @@ public class PaymentServiceImpl implements PaymentService {
 
         if (!order.getUser().getEmail().equals(email)) {
             throw new RuntimeException("La orden no pertenece al usuario autenticado");
+        }
+
+        if (mockEnabled && hasPlaceholderTestCredentials()) {
+            return new BrickPaymentResponse(
+                    mapToOrderResponse(order),
+                    order.getMercadopagoPaymentId(),
+                    paymentStatusToMercadoPagoStatus(order.getPaymentStatus()),
+                    null,
+                    null,
+                    null,
+                    null
+            );
         }
 
         MercadoPagoConfig.setAccessToken(accessToken);
@@ -321,6 +457,19 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional(rollbackOn = Exception.class)
     public BrickPaymentResponse syncPendingPayments(String email) throws Exception {
         ensureConfigured();
+
+        if (mockEnabled && hasPlaceholderTestCredentials()) {
+            return new BrickPaymentResponse(
+                    null,
+                    null,
+                    PaymentStatus.PENDING,
+                    null,
+                    null,
+                    null,
+                    null
+            );
+        }
+
         MercadoPagoConfig.setAccessToken(accessToken);
 
         List<Order> pendingOrders = orderRepository
@@ -386,9 +535,12 @@ public class PaymentServiceImpl implements PaymentService {
      * todavía está bloqueada.
      */
     private void updateOrderWithPayment(Order order, Payment payment) {
+        updateOrderPaymentState(order, payment.getId(), mapPaymentStatus(payment.getStatus()));
+    }
+
+    private void updateOrderPaymentState(Order order, Long paymentId, String newStatus) {
         String previousStatus = order.getPaymentStatus();
-        order.setMercadopagoPaymentId(payment.getId());
-        String newStatus = mapPaymentStatus(payment.getStatus());
+        order.setMercadopagoPaymentId(paymentId);
         order.setPaymentStatus(newStatus);
         orderRepository.save(order);
 
@@ -402,6 +554,12 @@ public class PaymentServiceImpl implements PaymentService {
             order.setTradeStatus(TradeStatus.PREPARING_TRADE);
             orderRepository.save(order);
             botFileService.updateStatus(order.getId(), order.getTradeStatus().name());
+        }
+
+        if ("PAID".equals(newStatus)
+                && order.getOperationType() == OperationType.BALANCE_TOP_UP
+                && !Boolean.TRUE.equals(order.getSaldoAcreditado())) {
+            acreditarRecargaSaldo(order);
         }
 
         // Si la compra fue pagada con éxito y es PURCHASE, se entrega ahora o
@@ -494,6 +652,80 @@ public class PaymentServiceImpl implements PaymentService {
         if (!publicadaConStock && !reservadaPorCheckout) {
             throw new RuntimeException("La skin ya fue reservada o vendida");
         }
+    }
+
+    private BrickPaymentResponse processLocalTestCardPayment(
+            String email,
+            Long orderId,
+            TestCardPaymentRequest request,
+            String cardNumber) {
+        Order order = orderRepository.findByIdForUpdate(orderId)
+                .orElseThrow(() -> new RuntimeException("Orden no encontrada: " + orderId));
+
+        if (!order.getUser().getEmail().equals(email)) {
+            throw new RuntimeException("La orden no pertenece al usuario autenticado");
+        }
+        if ("PAID".equals(order.getPaymentStatus())) {
+            return approvedExistingPaymentResponse(order);
+        }
+
+        validatePayableOrder(order);
+        validarPublicacionesDisponiblesParaPago(order);
+
+        long paymentId = 9_000_000_000_000_000L + orderId;
+        updateOrderPaymentState(order, paymentId, "PAID");
+
+        return new BrickPaymentResponse(
+                mapToOrderResponse(order),
+                paymentId,
+                PaymentStatus.APPROVED,
+                "accredited",
+                firstNonBlank(request.getPaymentMethodId(), inferPaymentMethodId(cardNumber)),
+                "credit_card",
+                null
+        );
+    }
+
+    private BrickPaymentResponse approvedBalanceResponse(Order order) {
+        return new BrickPaymentResponse(
+                mapToOrderResponse(order),
+                null,
+                PaymentStatus.APPROVED,
+                "accredited",
+                "account_balance",
+                "account_money",
+                null
+        );
+    }
+
+    private BrickPaymentResponse approvedExistingPaymentResponse(Order order) {
+        return new BrickPaymentResponse(
+                mapToOrderResponse(order),
+                order.getMercadopagoPaymentId(),
+                PaymentStatus.APPROVED,
+                "already_paid",
+                null,
+                null,
+                null
+        );
+    }
+
+    private void acreditarRecargaSaldo(Order order) {
+        double amountUsd = order.getPriceDifference() != null ? order.getPriceDifference() : 0.0;
+        if (amountUsd <= 0) {
+            throw new RuntimeException("La orden de recarga no tiene saldo para acreditar");
+        }
+
+        User user = order.getUser();
+        double currentBalance = user.getSaldo() != null ? user.getSaldo() : 0.0;
+        user.setSaldo(BigDecimal.valueOf(currentBalance + amountUsd)
+                .setScale(2, RoundingMode.HALF_UP)
+                .doubleValue());
+        userRepository.save(user);
+
+        order.setSaldoAcreditado(true);
+        order.setTradeStatus(TradeStatus.COMPLETED);
+        orderRepository.save(order);
     }
 
     private List<OrderDetail> detallesOrdenados(Order order) {
@@ -622,6 +854,44 @@ public class PaymentServiceImpl implements PaymentService {
         }
     }
 
+    private boolean hasPlaceholderTestCredentials() {
+        return accessToken.matches("TEST-[0-]+") || publicKey.matches("TEST-[0-]+");
+    }
+
+    private void validateTestCardData(TestCardPaymentRequest request, String authenticatedEmail) {
+        Integer expirationMonth = request.getExpirationMonth();
+        Integer expirationYear = normalizeExpirationYear(request.getExpirationYear());
+        if (expirationMonth == null || expirationMonth < 1 || expirationMonth > 12 || expirationYear == null) {
+            throw new RuntimeException("La fecha de vencimiento de la tarjeta es inválida");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        if (expirationYear < now.getYear()
+                || (expirationYear == now.getYear() && expirationMonth < now.getMonthValue())) {
+            throw new RuntimeException("La tarjeta está vencida");
+        }
+
+        String securityCode = request.getSecurityCode() != null ? request.getSecurityCode().trim() : "";
+        if (!securityCode.matches("\\d{3,4}")) {
+            throw new RuntimeException("El código de seguridad debe tener 3 o 4 números");
+        }
+        if (request.getCardholderName() == null || request.getCardholderName().trim().length() < 2) {
+            throw new RuntimeException("Ingresá el nombre del titular de la tarjeta");
+        }
+
+        String documentNumber = request.getDocumentNumber() != null
+                ? request.getDocumentNumber().replaceAll("\\D", "")
+                : "";
+        if (!documentNumber.matches("\\d{7,9}")) {
+            throw new RuntimeException("El DNI debe tener entre 7 y 9 números");
+        }
+
+        String payerEmail = firstNonBlank(request.getEmail(), authenticatedEmail);
+        if (payerEmail == null || !payerEmail.matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")) {
+            throw new RuntimeException("Ingresá un e-mail válido para el pago");
+        }
+    }
+
     private String createTestCardToken(TestCardPaymentRequest request, String cardNumber) {
         Integer expirationMonth = request.getExpirationMonth();
         Integer expirationYear = normalizeExpirationYear(request.getExpirationYear());
@@ -700,6 +970,10 @@ public class PaymentServiceImpl implements PaymentService {
             return order.getPriceDifference() != null ? Math.max(order.getPriceDifference(), 0.0) : 0.0;
         }
         return order.getTotalFinal() != null ? order.getTotalFinal() : 0.0;
+    }
+
+    private double roundMoney(double value) {
+        return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
     }
 
     private PaymentPayerRequest buildPayer(Order order, BrickPaymentRequest request) {
@@ -783,6 +1057,9 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     private String buildDescription(Order order) {
+        if (order.getOperationType() == OperationType.BALANCE_TOP_UP) {
+            return "Recarga de saldo de intercambio";
+        }
         return order.getOrderDetails().stream()
                 .map(detail -> detail.getQuantity() + "x " + detail.getSkin().getName())
                 .reduce((a, b) -> a + ", " + b)

@@ -73,6 +73,7 @@ public class MockTradeScheduler {
         if (!mockEnabled) return;
 
         repararInventarioComprasPagadas();
+        repararOperacionesCompletadas();
 
         List<Order> pendientes = orderRepository.findByTradeStatusIn(List.of(
                 TradeStatus.WAITING_PAYMENT,
@@ -127,6 +128,23 @@ public class MockTradeScheduler {
         }
     }
 
+    private void repararOperacionesCompletadas() {
+        List<Order> completadas = orderRepository.findByTradeStatusIn(
+                List.of(TradeStatus.COMPLETED));
+        for (Order order : completadas) {
+            try {
+                if (order.getOperationType() == OperationType.EXCHANGE) {
+                    completarIntercambio(order);
+                } else if (order.getOperationType() == OperationType.SALE) {
+                    completarVenta(order);
+                }
+            } catch (Exception e) {
+                System.err.println("[MOCK] Error reparando operacion completada " +
+                        order.getId() + ": " + e.getMessage());
+            }
+        }
+    }
+
     private void procesar(Order order) {
         TradeStatus current = order.getTradeStatus();
         long secondsSinceUpdate = secondsSince(order.getDate());
@@ -168,7 +186,9 @@ public class MockTradeScheduler {
                 // Marcar items del USER como "publicados" para que no los use de nuevo
                 marcarItemsComoBloqueados(order);
             } else if (order.getOperationType() == OperationType.EXCHANGE) {
-                TradeStatus next = (order.getPriceDifference() != null && order.getPriceDifference() > 0)
+                TradeStatus next = (order.getPriceDifference() != null &&
+                        order.getPriceDifference() > 0 &&
+                        !"PAID_WITH_BALANCE".equals(order.getPaymentStatus()))
                         ? TradeStatus.WAITING_DIFFERENCE
                         : TradeStatus.PREPARING_TRADE;
                 avanzarA(order, next,
@@ -214,14 +234,19 @@ public class MockTradeScheduler {
         TradeStatus prev = order.getTradeStatus();
         order.setTradeStatus(next);
         orderRepository.save(order);
-        if (next == TradeStatus.COMPLETED &&
-                (order.getOperationType() == OperationType.PURCHASE ||
-                        order.getOperationType() == OperationType.EXCHANGE)) {
-            marcarPublicacionesComoVendidas(order);
+        if (next == TradeStatus.COMPLETED) {
+            if (order.getOperationType() == OperationType.PURCHASE ||
+                    order.getOperationType() == OperationType.EXCHANGE) {
+                marcarPublicacionesComoVendidas(order);
+            }
             if (order.getOperationType() == OperationType.PURCHASE) {
                 marcarReservasComoEntregadas(order);
                 transferirSkinAlComprador(order);
                 acreditarSaldoVendedores(order);
+            } else if (order.getOperationType() == OperationType.EXCHANGE) {
+                completarIntercambio(order);
+            } else if (order.getOperationType() == OperationType.SALE) {
+                completarVenta(order);
             }
         }
         System.out.println("[MOCK] Orden " + order.getId() + ": " + prev + " → " + next +
@@ -418,6 +443,84 @@ public class MockTradeScheduler {
 
         order.setSaldoAcreditado(true);
         orderRepository.save(order);
+    }
+
+    private void completarVenta(Order order) {
+        consumirItemsDelUsuario(order);
+        if (Boolean.TRUE.equals(order.getSaldoAcreditado())) return;
+
+        User user = order.getUser();
+        if (user == null) return;
+        double importe = order.getTotalFinal() != null ? order.getTotalFinal() : 0.0;
+        double saldoActual = user.getSaldo() != null ? user.getSaldo() : 0.0;
+        user.setSaldo(saldoActual + importe);
+        order.setSaldoAcreditado(true);
+        userRepository.save(user);
+        orderRepository.save(order);
+    }
+
+    private void completarIntercambio(Order order) {
+        consumirItemsDelUsuario(order);
+        User user = order.getUser();
+        if (user == null) return;
+
+        for (OrderDetail detail : order.getOrderDetails()) {
+            Skin skin = detail.getSkin();
+            if (skin == null || skin.getId() == null) continue;
+
+            boolean yaExiste = inventarioItemRepository
+                    .findByUserAndPendingOrderIdAndPendingSkinId(user, order.getId(), skin.getId())
+                    .isPresent();
+            if (yaExiste) continue;
+
+            String assetId = skin.getSteamAssetId();
+            if (assetId == null || assetId.isBlank()) {
+                assetId = "EXCHANGE-" + order.getId() + "-" + skin.getId();
+            }
+
+            InventarioItem item = InventarioItem.builder()
+                    .user(user)
+                    .assetId(assetId)
+                    .publicado(false)
+                    .build();
+            item.setName(skin.getName());
+            item.setMarketHashName(skin.getName());
+            item.setIconUrl(skin.getImageUrl());
+            item.setType(skin.getCatalogo() != null ? skin.getCatalogo().getCategoryName() : null);
+            item.setCatalogo(skin.getCatalogo());
+            item.setFechaSync(LocalDateTime.now());
+            item.setInventoryStatus(InventarioItem.STATUS_DELIVERED);
+            item.setPendingOrderId(order.getId());
+            item.setPendingSkinId(skin.getId());
+            item.setDeliveredAt(LocalDateTime.now());
+            item.setTradable(true);
+            item.setMarketable(true);
+            inventarioItemRepository.save(item);
+        }
+    }
+
+    private void consumirItemsDelUsuario(Order order) {
+        for (String assetId : assetIdsUsuario(order)) {
+            inventarioItemRepository.findByUserAndAssetId(order.getUser(), assetId)
+                    .ifPresent(inventarioItemRepository::delete);
+        }
+    }
+
+    private List<String> assetIdsUsuario(Order order) {
+        if (order.getUserSkinAssetIds() == null || order.getUserSkinAssetIds().isBlank()) {
+            return List.of();
+        }
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper =
+                    new com.fasterxml.jackson.databind.ObjectMapper();
+            return mapper.readValue(
+                    order.getUserSkinAssetIds(),
+                    new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {});
+        } catch (Exception e) {
+            System.err.println("[MOCK] No se pudieron resolver items de la operacion " +
+                    order.getId() + ": " + e.getMessage());
+            return List.of();
+        }
     }
 
     private void acreditarSaldoSiCorresponde(Order order) {

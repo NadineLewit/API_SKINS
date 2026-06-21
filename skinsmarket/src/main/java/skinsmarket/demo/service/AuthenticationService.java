@@ -41,6 +41,7 @@ import lombok.RequiredArgsConstructor;
 
 import java.net.URLEncoder;
 import java.net.URI;
+import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -49,6 +50,10 @@ import java.util.Base64;
 import java.util.HexFormat;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.xml.parsers.DocumentBuilderFactory;
+import org.w3c.dom.Document;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
 
 /**
  * Servicio de autenticación: registro e inicio de sesión con JWT.
@@ -248,8 +253,17 @@ public class AuthenticationService {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Steam no pudo validar el login");
         }
 
+        SteamProfileData profile = fetchSteamProfile(steamId64);
         User user = userRepository.findBySteamId64(steamId64)
-                .orElseGet(() -> createSteamUser(steamId64));
+                .orElseGet(() -> createSteamUser(steamId64, profile));
+
+        if (!isBlank(profile.username())) {
+            user.setSteamUsername(profile.username());
+        }
+        if (!isBlank(profile.avatarUrl())) {
+            user.setSteamAvatarUrl(profile.avatarUrl());
+        }
+        userRepository.save(user);
         String jwtToken = jwtService.generateToken(user);
 
         return new SteamAuthResult(
@@ -436,17 +450,19 @@ public class AuthenticationService {
         return matcher.group(1);
     }
 
-    private User createSteamUser(String steamId64) {
+    private User createSteamUser(String steamId64, SteamProfileData profile) {
         String username = buildUniqueSteamUsername(steamId64);
         User user = User.builder()
                 .username(username)
-                .firstName("Steam")
+                .firstName(isBlank(profile.username()) ? "Steam" : profile.username())
                 .lastName("User")
                 .email("steam_" + steamId64 + "@steam.local")
                 .password(passwordEncoder.encode(generateToken()))
                 .emailVerified(true)
                 .role(Role.USER)
                 .steamId64(steamId64)
+                .steamUsername(profile.username())
+                .steamAvatarUrl(profile.avatarUrl())
                 .build();
 
         User savedUser = userRepository.save(user);
@@ -458,6 +474,41 @@ public class AuthenticationService {
         });
 
         return savedUser;
+    }
+
+    private SteamProfileData fetchSteamProfile(String steamId64) {
+        try {
+            String xml = restTemplate.getForObject(
+                    "https://steamcommunity.com/profiles/{steamId64}?xml=1",
+                    String.class,
+                    steamId64);
+            if (isBlank(xml)) return new SteamProfileData(null, null);
+
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            factory.setXIncludeAware(false);
+            factory.setExpandEntityReferences(false);
+
+            Document document = factory.newDocumentBuilder().parse(
+                    new InputSource(new StringReader(xml)));
+            return new SteamProfileData(
+                    firstTagText(document, "steamID"),
+                    firstTagText(document, "avatarFull"));
+        } catch (Exception ignored) {
+            return new SteamProfileData(null, null);
+        }
+    }
+
+    private String firstTagText(Document document, String tagName) {
+        NodeList nodes = document.getElementsByTagName(tagName);
+        if (nodes.getLength() == 0) return null;
+        String value = nodes.item(0).getTextContent();
+        return isBlank(value) ? null : value.trim();
+    }
+
+    private record SteamProfileData(String username, String avatarUrl) {
     }
 
     private String buildUniqueSteamUsername(String steamId64) {

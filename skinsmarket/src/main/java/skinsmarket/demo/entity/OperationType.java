@@ -18,5 +18,6 @@ public enum OperationType {
     PURCHASE,
     SALE,
     EXCHANGE,
+    BALANCE_TOP_UP,
     RETURN
 }

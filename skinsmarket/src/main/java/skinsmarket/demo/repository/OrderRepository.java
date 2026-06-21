@@ -1,12 +1,17 @@
 package skinsmarket.demo.repository;
 
+import jakarta.persistence.LockModeType;
 import skinsmarket.demo.entity.Order;
 import skinsmarket.demo.entity.OperationType;
 import skinsmarket.demo.entity.TradeStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Repositorio JPA para la entidad Order.
@@ -17,8 +22,34 @@ import java.util.List;
 @Repository
 public interface OrderRepository extends JpaRepository<Order, Long> {
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT o FROM Order o WHERE o.id = :id")
+    Optional<Order> findByIdForUpdate(@Param("id") Long id);
+
     /** Histórico de órdenes del usuario (más reciente primero). */
     List<Order> findByUserIdOrderByDateDesc(Long userId);
+
+    /** Órdenes con sus detalles y skins inicializados para construir DTOs fuera de JPA. */
+    @Query("SELECT DISTINCT o FROM Order o " +
+            "LEFT JOIN FETCH o.orderDetails od " +
+            "LEFT JOIN FETCH od.skin " +
+            "WHERE o.user.id = :userId ORDER BY o.date DESC")
+    List<Order> findDetailedByUserIdOrderByDateDesc(@Param("userId") Long userId);
+
+    @Query("SELECT DISTINCT o FROM Order o " +
+            "LEFT JOIN FETCH o.orderDetails od " +
+            "LEFT JOIN FETCH od.skin " +
+            "WHERE o.id = :id")
+    Optional<Order> findDetailedById(@Param("id") Long id);
+
+    @Query("SELECT DISTINCT o FROM Order o " +
+            "JOIN FETCH o.orderDetails od " +
+            "JOIN FETCH od.skin s " +
+            "WHERE s.vendedor.id = :sellerId " +
+            "AND o.operationType = skinsmarket.demo.entity.OperationType.PURCHASE " +
+            "AND o.paymentStatus = 'PAID' " +
+            "ORDER BY o.date DESC")
+    List<Order> findPaidPurchasesForSeller(@Param("sellerId") Long sellerId);
 
     /** Órdenes pendientes de pago de un usuario, de más reciente a más antigua. */
     List<Order> findByUserEmailAndPaymentStatusOrderByDateDesc(String email, String paymentStatus);

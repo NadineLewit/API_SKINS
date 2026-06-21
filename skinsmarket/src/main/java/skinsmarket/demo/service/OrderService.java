@@ -2,6 +2,7 @@ package skinsmarket.demo.service;
 
 import skinsmarket.demo.controller.order.OrderResponse;
 import skinsmarket.demo.controller.order.OrderRequest;
+import skinsmarket.demo.controller.order.SellerSaleResponse;
 import skinsmarket.demo.entity.Order;
 import skinsmarket.demo.exception.NoStockAvailableException;
 import skinsmarket.demo.exception.PropietarioSkinException;
@@ -30,6 +31,9 @@ public interface OrderService {
 
     /** Devuelve el historial de órdenes del usuario, de más reciente a más antigua. */
     List<OrderResponse> getOrdersForUser(User user);
+
+    /** Ventas pagadas de las publicaciones del vendedor autenticado. */
+    List<SellerSaleResponse> getPaidSalesForSeller(User seller);
 
     /** Obtiene una orden por ID verificando que pertenezca al usuario. Null si no. */
     OrderResponse getOrderById(Long id, String email);

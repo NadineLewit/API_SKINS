@@ -78,6 +78,13 @@ public class User implements UserDetails {
     @Column(name = "steam_id_64", length = 30)
     private String steamId64;
 
+    /** Nombre público y avatar informados por Steam al iniciar sesión. */
+    @Column(name = "steam_username", length = 100)
+    private String steamUsername;
+
+    @Column(name = "steam_avatar_url", length = 500)
+    private String steamAvatarUrl;
+
     /**
      * Trade URL de Steam — link tipo:
      *   https://steamcommunity.com/tradeoffer/new/?partner=12345&token=ABC

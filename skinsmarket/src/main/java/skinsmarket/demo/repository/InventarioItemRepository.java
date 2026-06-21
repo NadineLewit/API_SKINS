@@ -1,6 +1,7 @@
 package skinsmarket.demo.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.stereotype.Repository;
 import skinsmarket.demo.entity.InventarioItem;
 import skinsmarket.demo.entity.User;
@@ -12,6 +13,7 @@ import java.util.Optional;
 public interface InventarioItemRepository extends JpaRepository<InventarioItem, Long> {
 
     /** Devuelve todos los items del inventario de un usuario. */
+    @EntityGraph(attributePaths = "catalogo")
     List<InventarioItem> findByUser(User user);
 
     /**

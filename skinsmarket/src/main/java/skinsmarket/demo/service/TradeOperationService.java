@@ -4,6 +4,7 @@ import skinsmarket.demo.controller.order.ExchangeRequest;
 import skinsmarket.demo.controller.order.ExchangeQuoteResponse;
 import skinsmarket.demo.controller.order.OperationStatusResponse;
 import skinsmarket.demo.controller.order.SaleRequest;
+import skinsmarket.demo.entity.InventarioItem;
 
 import java.util.List;
 
@@ -27,6 +28,9 @@ public interface TradeOperationService {
 
     /** Cotiza un intercambio sin reservar skins ni crear orden. */
     ExchangeQuoteResponse quoteExchange(String email, ExchangeRequest request);
+
+    /** Estima el valor de una skin del inventario con la misma regla del intercambio. */
+    double estimateInventoryItemPrice(InventarioItem item);
 
     /** Cancela una operación. Si el USER ya entregó skins, genera una RETURN. */
     OperationStatusResponse cancelOperation(String email, Long orderId);

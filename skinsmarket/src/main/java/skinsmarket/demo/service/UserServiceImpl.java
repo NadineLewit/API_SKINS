@@ -12,6 +12,7 @@ import skinsmarket.demo.utils.InfoValidator;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -31,6 +32,9 @@ public class UserServiceImpl implements UserService {
 
     @Autowired
     private InventarioService inventarioService;
+
+    @Value("${application.balance.usd-to-ars:1451.02}")
+    private double usdToArs;
 
     @Override
     @Transactional
@@ -206,8 +210,11 @@ public class UserServiceImpl implements UserService {
         r.setFirstName(user.getFirstName());
         r.setLastName(user.getLastName());
         r.setSaldo(user.getSaldo());
+        r.setUsdToArs(usdToArs);
         r.setRole(user.getRole());
         r.setSteamId64(user.getSteamId64());
+        r.setSteamUsername(user.getSteamUsername());
+        r.setSteamAvatarUrl(user.getSteamAvatarUrl());
         r.setTradeUrl(user.getTradeUrl());
         r.setAliasCobro(user.getAliasCobro());
         return r;

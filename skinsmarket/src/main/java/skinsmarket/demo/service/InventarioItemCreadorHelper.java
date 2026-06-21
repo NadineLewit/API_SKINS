@@ -2,7 +2,6 @@ package skinsmarket.demo.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import skinsmarket.demo.entity.InventarioItem;
 import skinsmarket.demo.entity.Order;
@@ -15,12 +14,11 @@ import java.time.LocalDateTime;
 /**
  * Helper para crear InventarioItems de compra de forma idempotente.
  *
- * Usa REQUIRES_NEW para que la creación corra en su propia transacción.
- * Si dos requests llegan al mismo tiempo e intentan insertar el mismo item
- * (unique constraint: user_id + asset_id), uno de los dos va a fallar con
- * DataIntegrityViolationException. Con REQUIRES_NEW, ese fallo solo afecta
- * la sub-transacción interna; la transacción principal (que guarda el
- * paymentStatus = "PAID") no se ve afectada y puede commitear normalmente.
+ * Participa de la transacción del pago. La orden se bloquea antes de invocar
+ * este helper, por lo que dos confirmaciones no pueden crear el mismo item.
+ * Mantener una transacción REQUIRES_NEW aquí genera un lock wait: el insert
+ * necesita validar las claves foráneas de la orden que la transacción padre
+ * todavía mantiene bloqueada.
  */
 @Component
 public class InventarioItemCreadorHelper {
@@ -32,10 +30,10 @@ public class InventarioItemCreadorHelper {
      * Crea el InventarioItem de la compra si aún no existe.
      * Si ya existe (otro hilo o request lo creó antes), no hace nada.
      *
-     * Corre en su PROPIA transacción (REQUIRES_NEW) para que un eventual
-     * DataIntegrityViolationException no contamine la transacción del llamador.
+     * Corre dentro de la transacción del llamador para que el pago y el item de
+     * inventario se confirmen de forma atómica.
      */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional
     public void crearSiNoExiste(User comprador, Order order, Skin skin, String assetId) {
         boolean yaExiste = inventarioItemRepository
                 .findByUserAndPendingOrderIdAndPendingSkinId(comprador, order.getId(), skin.getId())

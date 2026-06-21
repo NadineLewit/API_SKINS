@@ -5,6 +5,7 @@ import skinsmarket.demo.controller.payment.BrickPaymentResponse;
 import skinsmarket.demo.controller.payment.BrickPreferenceResponse;
 import skinsmarket.demo.controller.payment.MercadoPagoWebhookRequest;
 import skinsmarket.demo.controller.payment.TestCardPaymentRequest;
+import skinsmarket.demo.controller.payment.BalanceTopUpPaymentRequest;
 
 public interface PaymentService {
 
@@ -15,6 +16,10 @@ public interface PaymentService {
     BrickPaymentResponse processBrickPayment(String email, Long orderId, BrickPaymentRequest request, String idempotencyKey) throws Exception;
 
     BrickPaymentResponse processTestCardPayment(String email, Long orderId, TestCardPaymentRequest request, String idempotencyKey) throws Exception;
+
+    BrickPaymentResponse processBalancePayment(String email, Long orderId);
+
+    BrickPaymentResponse processBalanceTopUpTestCard(String email, BalanceTopUpPaymentRequest request, String idempotencyKey) throws Exception;
 
     BrickPaymentResponse syncPaymentStatus(String email, Long orderId) throws Exception;
 

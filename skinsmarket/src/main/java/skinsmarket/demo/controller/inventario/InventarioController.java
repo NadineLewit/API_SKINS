@@ -11,6 +11,7 @@ import skinsmarket.demo.entity.Skin;
 import skinsmarket.demo.entity.User;
 import skinsmarket.demo.repository.UserRepository;
 import skinsmarket.demo.service.InventarioService;
+import skinsmarket.demo.service.TradeOperationService;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -37,6 +38,9 @@ public class InventarioController {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private TradeOperationService tradeOperationService;
 
     /**
      * GET /inventario/status — diagnóstico del USER autenticado.
@@ -78,8 +82,13 @@ public class InventarioController {
     public ResponseEntity<?> listar(Authentication auth) {
         try {
             List<InventarioItem> items = inventarioService.listarInventario(auth.getName());
+            List<InventarioItemResponse> response = items.stream()
+                    .map(item -> InventarioItemResponse.from(
+                            item,
+                            tradeOperationService.estimateInventoryItemPrice(item)))
+                    .toList();
             return ResponseEntity.ok(
-                    ApiResponse.of("Inventario del usuario (" + items.size() + " items)", items));
+                    ApiResponse.of("Inventario del usuario (" + items.size() + " items)", response));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(ApiResponse.of(e.getMessage()));
         }
@@ -100,9 +109,14 @@ public class InventarioController {
         try {
             int total = inventarioService.sincronizar(auth.getName());
             List<InventarioItem> items = inventarioService.listarInventario(auth.getName());
+            List<InventarioItemResponse> response = items.stream()
+                    .map(item -> InventarioItemResponse.from(
+                            item,
+                            tradeOperationService.estimateInventoryItemPrice(item)))
+                    .toList();
             return ResponseEntity.ok(ApiResponse.of(
                     "Inventario sincronizado correctamente. Items totales: " + total,
-                    items));
+                    response));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(ApiResponse.of(e.getMessage()));
         }

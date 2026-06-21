@@ -15,6 +15,7 @@ import skinsmarket.demo.repository.UserRepository;
 import skinsmarket.demo.utils.TradeProfileValidator;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -43,6 +44,9 @@ public class OrderServiceImpl implements OrderService {
     @Autowired private CarritoRepository carritoRepository;
     @Autowired private UserRepository userRepository;
 
+    @Value("${mock.enabled:true}")
+    private boolean mockEnabled;
+
     @Override
     @Transactional
     public OrderResponse createOrderFromCarrito(String email, String codigoCupon)
@@ -50,7 +54,9 @@ public class OrderServiceImpl implements OrderService {
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-        TradeProfileValidator.requireTradeUrl(user, "comprar");
+        if (!mockEnabled) {
+            TradeProfileValidator.requireTradeUrl(user, "comprar");
+        }
 
         Carrito carrito = carritoRepository.findByUser(user)
                 .orElseThrow(() -> new RuntimeException("El usuario no tiene carrito"));
@@ -124,7 +130,9 @@ public class OrderServiceImpl implements OrderService {
             if (skin.getStock() == null || skin.getStock() < 1) {
                 throw new NoStockAvailableException();
             }
-            validarVendedorListoParaCobrar(skin);
+            if (!mockEnabled) {
+                validarVendedorListoParaCobrar(skin);
+            }
 
             double finalPrice = skin.getFinalPrice();
 
@@ -213,15 +221,37 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     public List<OrderResponse> getOrdersForUser(User user) {
-        List<Order> orders = orderRepository.findByUserIdOrderByDateDesc(user.getId());
+        List<Order> orders = orderRepository.findDetailedByUserIdOrderByDateDesc(user.getId());
         List<OrderResponse> responses = new ArrayList<>();
         for (Order order : orders) responses.add(mapToOrderResponse(order));
         return responses;
     }
 
     @Override
+    public List<skinsmarket.demo.controller.order.SellerSaleResponse> getPaidSalesForSeller(User seller) {
+        List<skinsmarket.demo.controller.order.SellerSaleResponse> sales = new ArrayList<>();
+        for (Order order : orderRepository.findPaidPurchasesForSeller(seller.getId())) {
+            for (OrderDetail detail : order.getOrderDetails()) {
+                Skin skin = detail.getSkin();
+                if (skin == null) continue;
+                sales.add(new skinsmarket.demo.controller.order.SellerSaleResponse(
+                        order.getId(),
+                        skin.getId(),
+                        skin.getName(),
+                        skin.getImageUrl(),
+                        detail.getUnitPrice(),
+                        order.getPaymentStatus(),
+                        order.getTradeStatus() != null ? order.getTradeStatus().name() : null,
+                        order.getDate()
+                ));
+            }
+        }
+        return sales;
+    }
+
+    @Override
     public OrderResponse getOrderById(Long id, String email) {
-        return orderRepository.findById(id)
+        return orderRepository.findDetailedById(id)
                 .filter(o -> o.getUser().getEmail().equals(email))
                 .map(this::mapToOrderResponse)
                 .orElse(null);

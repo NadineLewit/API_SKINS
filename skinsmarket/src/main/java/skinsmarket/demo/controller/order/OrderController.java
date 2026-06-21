@@ -72,6 +72,16 @@ public class OrderController {
                 ApiResponse.of("Tus órdenes (" + orders.size() + ")", orders));
     }
 
+    /** Ventas pagadas de las publicaciones del vendedor autenticado. */
+    @GetMapping("/sales")
+    public ResponseEntity<?> getMySales(Authentication auth) {
+        User seller = userRepository.findByEmail(auth.getName())
+                .orElseThrow(() -> new IllegalStateException("Usuario no encontrado"));
+        List<SellerSaleResponse> sales = orderService.getPaidSalesForSeller(seller);
+        return ResponseEntity.ok(
+                ApiResponse.of("Ventas confirmadas (" + sales.size() + ")", sales));
+    }
+
     /**
      * Obtiene una orden por ID.
      * GET /order/{id}

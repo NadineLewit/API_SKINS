@@ -11,6 +11,7 @@ import skinsmarket.demo.repository.UserRepository;
 import skinsmarket.demo.utils.TradeProfileValidator;
 import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
@@ -35,6 +36,9 @@ public class CarritoServiceImpl implements CarritoService {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Value("${mock.enabled:true}")
+    private boolean mockEnabled;
 
     /**
      * Obtiene el carrito del usuario o lo crea vacío si no tiene uno.
@@ -103,10 +107,19 @@ public class CarritoServiceImpl implements CarritoService {
         if (skin.getStock() == null || skin.getStock() < 1) {
             throw new RuntimeException("La skin ya fue reservada o vendida");
         }
-        validarVendedorListoParaCobrar(skin);
 
         Carrito carrito = obtenerOCrearCarrito(email);
-        TradeProfileValidator.requireTradeUrl(carrito.getUser(), "agregar skins al carrito");
+        if (skin.getVendedor() != null &&
+                skin.getVendedor().getId().equals(carrito.getUser().getId())) {
+            throw new RuntimeException("No podés comprar tu propia publicación");
+        }
+        if (!mockEnabled) {
+            validarVendedorListoParaCobrar(skin);
+        }
+
+        if (!mockEnabled) {
+            TradeProfileValidator.requireTradeUrl(carrito.getUser(), "agregar skins al carrito");
+        }
 
         boolean yaEstaEnCarrito = carrito.getItems().stream()
                 .filter(i -> i.getSkin().getId().equals(skinId))

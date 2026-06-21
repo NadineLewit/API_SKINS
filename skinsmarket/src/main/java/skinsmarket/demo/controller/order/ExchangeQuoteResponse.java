@@ -9,5 +9,8 @@ public class ExchangeQuoteResponse {
     private Double diferencia;
     private Double montoAPagar;
     private Double saldoARecibir;
+    private Double saldoDisponible;
+    private Double saldoRestante;
+    private Double saldoFaltante;
     private String resultado;
 }

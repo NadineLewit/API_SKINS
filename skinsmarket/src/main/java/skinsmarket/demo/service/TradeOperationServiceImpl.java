@@ -20,6 +20,8 @@ import skinsmarket.demo.utils.TradeProfileValidator;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 /**
  * Implementación del servicio de operaciones (venta / intercambio / cancelación).
@@ -138,7 +140,20 @@ public class TradeOperationServiceImpl implements TradeOperationService {
     public OperationStatusResponse createExchange(String email, ExchangeRequest request) {
         ExchangeCalculation calc = calcularIntercambio(email, request);
         User user = calc.user();
-        double diferenciaAPagar = Math.max(calc.diferencia(), 0.0);
+        double diferenciaAPagar = roundMoney(Math.max(calc.diferencia(), 0.0));
+        double saldoActual = roundMoney(user.getSaldo() != null ? user.getSaldo() : 0.0);
+
+        if (diferenciaAPagar > saldoActual) {
+            double faltante = diferenciaAPagar - saldoActual;
+            throw new RuntimeException(String.format(
+                    "Saldo insuficiente. Te faltan $%.2f USD para realizar el intercambio.",
+                    faltante));
+        }
+
+        if (diferenciaAPagar > 0) {
+            user.setSaldo(roundMoney(saldoActual - diferenciaAPagar));
+            userRepository.save(user);
+        }
 
         // Crear la Order de intercambio
         Order order = new Order();
@@ -146,11 +161,11 @@ public class TradeOperationServiceImpl implements TradeOperationService {
         order.setDate(LocalDateTime.now());
         order.setOperationType(OperationType.EXCHANGE);
         order.setTradeStatus(TradeStatus.WAITING_USER_TRADE);
-        order.setPaymentStatus(diferenciaAPagar > 0 ? "PENDING_PAYMENT" : "N/A");
+        order.setPaymentStatus(diferenciaAPagar > 0 ? "PAID_WITH_BALANCE" : "N/A");
         order.setTotalPrice(calc.valorMarketplace());
         order.setTotalFinal(diferenciaAPagar);
         order.setDescuentoAplicado(0.0);
-        order.setPriceDifference(calc.diferencia());
+        order.setPriceDifference(roundMoney(calc.diferencia()));
         order.setUserSkinAssetIds(serializeAssetIds(calc.userAssetIds()));
 
         // Agregar las skins del marketplace como detalles (se reservan)
@@ -187,7 +202,17 @@ public class TradeOperationServiceImpl implements TradeOperationService {
     @Transactional(readOnly = true)
     public ExchangeQuoteResponse quoteExchange(String email, ExchangeRequest request) {
         ExchangeCalculation calc = calcularIntercambio(email, request);
-        return mapQuote(calc.valorMarketplace(), calc.valorUsuario(), calc.diferencia());
+        return mapQuote(
+                calc.valorMarketplace(),
+                calc.valorUsuario(),
+                calc.diferencia(),
+                calc.user().getSaldo());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public double estimateInventoryItemPrice(InventarioItem item) {
+        return precioPromedioMarketplace(item);
     }
 
     // =========================================================================
@@ -224,6 +249,8 @@ public class TradeOperationServiceImpl implements TradeOperationService {
             current == TradeStatus.WAITING_DIFFERENCE) {
 
             order.setTradeStatus(TradeStatus.CANCELLED);
+
+            reintegrarSaldoPagado(order);
 
             // Liberar stock de skins del marketplace (intercambio/compra)
             for (OrderDetail d : order.getOrderDetails()) {
@@ -324,7 +351,8 @@ public class TradeOperationServiceImpl implements TradeOperationService {
         if (order.getOperationType() == OperationType.SALE) {
             order.setTradeStatus(TradeStatus.PREPARING_TRADE);
         } else if (order.getOperationType() == OperationType.EXCHANGE) {
-            if (order.getPriceDifference() != null && order.getPriceDifference() > 0) {
+            if (order.getPriceDifference() != null && order.getPriceDifference() > 0 &&
+                    !"PAID_WITH_BALANCE".equals(order.getPaymentStatus())) {
                 order.setTradeStatus(TradeStatus.WAITING_DIFFERENCE);
             } else {
                 order.setTradeStatus(TradeStatus.PREPARING_TRADE);
@@ -359,7 +387,7 @@ public class TradeOperationServiceImpl implements TradeOperationService {
     public List<OperationStatusResponse> listMyOperations(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-        List<Order> orders = orderRepository.findByUserIdOrderByDateDesc(user.getId());
+        List<Order> orders = orderRepository.findDetailedByUserIdOrderByDateDesc(user.getId());
         List<OperationStatusResponse> out = new ArrayList<>();
         for (Order o : orders) out.add(mapToResponse(o));
         return out;
@@ -521,21 +549,47 @@ public class TradeOperationServiceImpl implements TradeOperationService {
         userRepository.save(user);
     }
 
-    private ExchangeQuoteResponse mapQuote(double valorMarketplace, double valorUsuario, double diferencia) {
+    private ExchangeQuoteResponse mapQuote(
+            double valorMarketplace,
+            double valorUsuario,
+            double diferencia,
+            Double saldoActualValue) {
         ExchangeQuoteResponse r = new ExchangeQuoteResponse();
-        r.setValorMarketplace(valorMarketplace);
-        r.setValorUsuario(valorUsuario);
-        r.setDiferencia(diferencia);
-        r.setMontoAPagar(Math.max(diferencia, 0.0));
-        r.setSaldoARecibir(Math.max(-diferencia, 0.0));
-        if (diferencia > 0) {
+        double saldoActual = roundMoney(saldoActualValue != null ? saldoActualValue : 0.0);
+        double diferenciaRedondeada = roundMoney(diferencia);
+        double montoAPagar = roundMoney(Math.max(diferenciaRedondeada, 0.0));
+        double saldoARecibir = roundMoney(Math.max(-diferenciaRedondeada, 0.0));
+        r.setValorMarketplace(roundMoney(valorMarketplace));
+        r.setValorUsuario(roundMoney(valorUsuario));
+        r.setDiferencia(diferenciaRedondeada);
+        r.setMontoAPagar(montoAPagar);
+        r.setSaldoARecibir(saldoARecibir);
+        r.setSaldoDisponible(saldoActual);
+        r.setSaldoFaltante(roundMoney(Math.max(montoAPagar - saldoActual, 0.0)));
+        r.setSaldoRestante(roundMoney(Math.max(saldoActual - montoAPagar, 0.0) + saldoARecibir));
+        if (diferenciaRedondeada > 0) {
             r.setResultado("PAGA_DIFERENCIA");
-        } else if (diferencia < 0) {
+        } else if (diferenciaRedondeada < 0) {
             r.setResultado("RECIBE_SALDO");
         } else {
             r.setResultado("INTERCAMBIO_DIRECTO");
         }
         return r;
+    }
+
+    private void reintegrarSaldoPagado(Order order) {
+        if (!"PAID_WITH_BALANCE".equals(order.getPaymentStatus())) return;
+        if (order.getPriceDifference() == null || order.getPriceDifference() <= 0) return;
+
+        User user = order.getUser();
+        double saldoActual = user.getSaldo() != null ? user.getSaldo() : 0.0;
+        user.setSaldo(roundMoney(saldoActual + order.getPriceDifference()));
+        order.setPaymentStatus("REFUNDED_TO_BALANCE");
+        userRepository.save(user);
+    }
+
+    private double roundMoney(double value) {
+        return BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).doubleValue();
     }
 
     private String serializeAssetIds(List<String> ids) {
