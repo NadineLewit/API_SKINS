@@ -29,10 +29,11 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 import skinsmarket.demo.controller.order.OrderDetailResponse;
 import skinsmarket.demo.controller.order.OrderResponse;
+import skinsmarket.demo.controller.payment.BalanceTopUpPaymentRequest;
+import skinsmarket.demo.controller.payment.BrickConfigResponse;
 import skinsmarket.demo.controller.payment.BrickPaymentRequest;
 import skinsmarket.demo.controller.payment.BrickPaymentResponse;
 import skinsmarket.demo.controller.payment.BrickPreferenceResponse;
-import skinsmarket.demo.controller.payment.BalanceTopUpPaymentRequest;
 import skinsmarket.demo.controller.payment.MercadoPagoWebhookRequest;
 import skinsmarket.demo.controller.payment.TestCardPaymentRequest;
 import skinsmarket.demo.entity.InventarioItem;
@@ -142,6 +143,12 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Override
+    public BrickConfigResponse getBrickConfig() {
+        ensurePublicKeyConfigured();
+        return new BrickConfigResponse(publicKey);
+    }
+
+    @Override
     @Transactional(rollbackOn = Exception.class)
     public BrickPreferenceResponse createBrickPreferenceFromCarrito(String email, String codigoCupon) throws Exception {
         OrderResponse orderResponse = orderService.createOrderFromCarrito(email, codigoCupon);
@@ -152,6 +159,15 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional(rollbackOn = Exception.class)
     public BrickPreferenceResponse createBrickPreferenceForExistingOrder(String email, Long orderId) throws Exception {
         return createPreferenceForOrder(email, orderId);
+    }
+
+    @Override
+    @Transactional(rollbackOn = Exception.class)
+    public BrickPreferenceResponse createBalanceTopUpPreference(
+            String email,
+            BalanceTopUpPaymentRequest request) throws Exception {
+        Order order = createBalanceTopUpOrder(email, request);
+        return createPreferenceForOrder(email, order.getId());
     }
 
     private BrickPreferenceResponse createPreferenceForOrder(String email, Long orderId) throws Exception {
@@ -388,6 +404,26 @@ public class PaymentServiceImpl implements PaymentService {
             String email,
             BalanceTopUpPaymentRequest request,
             String idempotencyKey) throws Exception {
+        Order order = createBalanceTopUpOrder(email, request);
+
+        if (request.getToken() != null && !request.getToken().isBlank()) {
+            BrickPaymentRequest brickRequest = new BrickPaymentRequest();
+            brickRequest.setToken(request.getToken());
+            brickRequest.setPaymentMethodId(request.getPaymentMethodId());
+            brickRequest.setIssuerId(request.getIssuerId());
+            brickRequest.setInstallments(request.getInstallments());
+            brickRequest.setTransactionAmount(request.getTransactionAmount() != null
+                    ? BigDecimal.valueOf(request.getTransactionAmount())
+                    : BigDecimal.valueOf(request.getAmountArs()));
+            brickRequest.setDescription("Recarga de saldo de intercambio");
+            brickRequest.setPayer(request.getPayer());
+            return processBrickPayment(email, order.getId(), brickRequest, idempotencyKey);
+        }
+
+        return processTestCardPayment(email, order.getId(), request, idempotencyKey);
+    }
+
+    private Order createBalanceTopUpOrder(String email, BalanceTopUpPaymentRequest request) {
         if (request == null || request.getAmountArs() == null) {
             throw new RuntimeException("El importe de la recarga es obligatorio");
         }
@@ -416,9 +452,7 @@ public class PaymentServiceImpl implements PaymentService {
         order.setTradeStatus(TradeStatus.WAITING_PAYMENT);
         order.setPriceDifference(amountUsd);
         order.setSaldoAcreditado(false);
-        orderRepository.save(order);
-
-        return processTestCardPayment(email, order.getId(), request, idempotencyKey);
+        return orderRepository.save(order);
     }
 
     @Override

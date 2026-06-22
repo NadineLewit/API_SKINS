@@ -1,5 +1,6 @@
 package skinsmarket.demo.controller.payment;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.Data;
 
 @Data
@@ -14,5 +15,6 @@ public class TestCardPaymentRequest {
     private String documentType;
     private String documentNumber;
     private Integer installments;
+    @JsonAlias({"payment_method_id", "paymentMethodId"})
     private String paymentMethodId;
 }

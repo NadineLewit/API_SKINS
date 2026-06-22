@@ -1,5 +1,6 @@
 package skinsmarket.demo.service;
 
+import skinsmarket.demo.controller.payment.BrickConfigResponse;
 import skinsmarket.demo.controller.payment.BrickPaymentRequest;
 import skinsmarket.demo.controller.payment.BrickPaymentResponse;
 import skinsmarket.demo.controller.payment.BrickPreferenceResponse;
@@ -9,9 +10,13 @@ import skinsmarket.demo.controller.payment.BalanceTopUpPaymentRequest;
 
 public interface PaymentService {
 
+    BrickConfigResponse getBrickConfig();
+
     BrickPreferenceResponse createBrickPreferenceFromCarrito(String email, String codigoCupon) throws Exception;
 
     BrickPreferenceResponse createBrickPreferenceForExistingOrder(String email, Long orderId) throws Exception;
+
+    BrickPreferenceResponse createBalanceTopUpPreference(String email, BalanceTopUpPaymentRequest request) throws Exception;
 
     BrickPaymentResponse processBrickPayment(String email, Long orderId, BrickPaymentRequest request, String idempotencyKey) throws Exception;
 

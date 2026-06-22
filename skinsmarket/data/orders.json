@@ -286,4 +286,16 @@
   "createdAt" : "2026-06-21T10:42:56.1328218",
   "updatedAt" : "2026-06-21T10:43:20.5727006",
   "mockMode" : "true"
+}, {
+  "orderId" : 44,
+  "operationType" : "PURCHASE",
+  "status" : "COMPLETED",
+  "direction" : "BOT_TO_USER",
+  "partnerSteamId64" : "76561199021497777",
+  "partnerTradeUrl" : "https://steamcommunity.com/tradeoffer/new/?partner=1061232049&token=25m4Ulv0",
+  "assetIds" : [ "SKIN-17" ],
+  "botTradeOfferId" : null,
+  "createdAt" : "2026-06-21T19:14:33.4582175",
+  "updatedAt" : "2026-06-21T19:14:43.8049052",
+  "mockMode" : "true"
 } ]

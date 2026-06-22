@@ -22,6 +22,11 @@ public class PaymentController {
     @Autowired
     private PaymentService paymentService;
 
+    @GetMapping("/bricks/config")
+    public ResponseEntity<?> getBrickConfig() {
+        return ResponseEntity.ok(ApiResponse.of("Configuracion de Mercado Pago", paymentService.getBrickConfig()));
+    }
+
     @PostMapping("/bricks/preferences/from-carrito")
     public ResponseEntity<?> createBrickPreferenceFromCarrito(
             Authentication auth,
@@ -96,8 +101,22 @@ public class PaymentController {
         }
     }
 
-    @PostMapping("/bricks/balance/process-test-card")
-    public ResponseEntity<?> processBalanceTopUpTestCard(
+    @PostMapping("/bricks/balance/preferences")
+    public ResponseEntity<?> createBalanceTopUpPreference(
+            Authentication auth,
+            @RequestBody(required = false) BalanceTopUpPaymentRequest request) {
+        try {
+            BrickPreferenceResponse response =
+                    paymentService.createBalanceTopUpPreference(auth.getName(), request);
+            return ResponseEntity.status(201)
+                    .body(ApiResponse.of("Preferencia de recarga creada", response));
+        } catch (Exception e) {
+            return mercadoPagoError(e);
+        }
+    }
+
+    @PostMapping({"/bricks/balance/process-payment", "/bricks/balance/process-test-card"})
+    public ResponseEntity<?> processBalanceTopUpPayment(
             Authentication auth,
             @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey,
             @RequestBody(required = false) BalanceTopUpPaymentRequest request) {
