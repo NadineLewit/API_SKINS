@@ -99,4 +99,23 @@ public class OrderController {
         return ResponseEntity.status(404)
                 .body(ApiResponse.of("Orden no encontrada con id: " + id));
     }
+
+    /**
+     * Cancela una compra pendiente de pago y libera las publicaciones reservadas.
+     * POST /order/{id}/cancel-pending
+     * TOKEN: USER — solo puede cancelar órdenes propias.
+     */
+    @PostMapping("/{id}/cancel-pending")
+    public ResponseEntity<?> cancelPendingPurchase(
+            Authentication auth,
+            @PathVariable Long id) {
+        try {
+            OrderResponse order = orderService.cancelPendingPurchase(id, auth.getName());
+            return ResponseEntity.ok(ApiResponse.of("Compra pendiente cancelada", order));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(ApiResponse.of(e.getMessage()));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.of(e.getMessage()));
+        }
+    }
 }

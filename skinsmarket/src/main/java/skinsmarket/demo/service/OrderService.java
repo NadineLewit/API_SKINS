@@ -38,6 +38,9 @@ public interface OrderService {
     /** Obtiene una orden por ID verificando que pertenezca al usuario. Null si no. */
     OrderResponse getOrderById(Long id, String email);
 
+    /** Cancela una compra pendiente y libera sus publicaciones reservadas. */
+    OrderResponse cancelPendingPurchase(Long id, String email);
+
     /** Devuelve todas las órdenes del sistema (panel admin). */
     List<Order> findAllOrders();
 }

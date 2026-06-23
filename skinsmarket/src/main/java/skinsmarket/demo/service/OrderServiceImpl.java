@@ -257,6 +257,46 @@ public class OrderServiceImpl implements OrderService {
                 .orElse(null);
     }
 
+    @Override
+    @Transactional
+    public OrderResponse cancelPendingPurchase(Long id, String email) {
+        Order order = orderRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new IllegalArgumentException("Orden no encontrada: " + id));
+
+        if (!order.getUser().getEmail().equals(email)) {
+            throw new RuntimeException("La orden no pertenece al usuario autenticado");
+        }
+        if (order.getOperationType() != OperationType.PURCHASE) {
+            throw new RuntimeException("Solo se pueden cancelar compras pendientes desde esta pantalla");
+        }
+        if ("PAID".equals(order.getPaymentStatus())) {
+            throw new RuntimeException("No se puede cancelar una compra ya pagada");
+        }
+        if ("CANCELLED".equals(order.getPaymentStatus())) {
+            return mapToOrderResponse(order);
+        }
+        if (!List.of("PENDING_PAYMENT", "IN_PROCESS").contains(order.getPaymentStatus())) {
+            throw new RuntimeException("La orden no está pendiente de pago");
+        }
+        if (order.getTradeStatus() != null && order.getTradeStatus() != TradeStatus.WAITING_PAYMENT) {
+            throw new RuntimeException("La orden ya avanzó en el intercambio y no se puede cancelar desde acá");
+        }
+
+        for (OrderDetail detail : order.getOrderDetails()) {
+            Skin skin = detail.getSkin();
+            if (skin == null) continue;
+            skin.setStock(1);
+            skin.setActive(true);
+            skin.setEstadoPublicacion(Skin.EstadoPublicacion.PUBLICADA);
+            skinRepository.save(skin);
+        }
+
+        order.setPaymentStatus("CANCELLED");
+        order.setTradeStatus(TradeStatus.CANCELLED);
+        orderRepository.save(order);
+        return mapToOrderResponse(order);
+    }
+
     private OrderResponse mapToOrderResponse(Order order) {
         OrderResponse resp = new OrderResponse();
         resp.setId(order.getId());
