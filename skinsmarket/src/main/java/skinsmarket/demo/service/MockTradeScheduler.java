@@ -405,7 +405,7 @@ public class MockTradeScheduler {
             nueva.setActive(false);
             nueva.setEstadoPublicacion(Skin.EstadoPublicacion.PAUSADA);
             nueva.setIntercambiable(true);
-            nueva.setVendible(true);
+            nueva.setVendible(false);
             nueva.setFechaAlta(LocalDateTime.now());
             skinRepository.save(nueva);
 

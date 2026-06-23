@@ -333,7 +333,7 @@ public class InventarioServiceImpl implements InventarioService {
         if (request.getPrice() == null || request.getPrice() <= 0) {
             throw new RuntimeException("El precio debe ser mayor a 0");
         }
-        validarIntercambiableOVendible(request.getIntercambiable(), request.getVendible());
+        validarPublicacionDeVenta(request.getIntercambiable(), request.getVendible());
 
         SkinCatalogo cat = item.getCatalogo();
         LocalDateTime ahora = LocalDateTime.now();
@@ -346,8 +346,8 @@ public class InventarioServiceImpl implements InventarioService {
         skin.setPrice(request.getPrice());
         skin.setDiscount(request.getDiscount() != null ? request.getDiscount() : 0.0);
         skin.setStock(1);
-        skin.setIntercambiable(valorDefaultTrue(request.getIntercambiable()));
-        skin.setVendible(valorDefaultTrue(request.getVendible()));
+        skin.setIntercambiable(false);
+        skin.setVendible(true);
         skin.setActive(true);
         skin.setEstadoPublicacion(Skin.EstadoPublicacion.PUBLICADA);
         skin.setStattrak(esStatTrak(item.getMarketHashName()));
@@ -368,14 +368,14 @@ public class InventarioServiceImpl implements InventarioService {
         return saved;
     }
 
-    private void validarIntercambiableOVendible(Boolean intercambiable, Boolean vendible) {
-        if (!valorDefaultTrue(intercambiable) && !valorDefaultTrue(vendible)) {
-            throw new RuntimeException("La skin debe ser intercambiable, vendible o ambas.");
+    private void validarPublicacionDeVenta(Boolean intercambiable, Boolean vendible) {
+        if (Boolean.FALSE.equals(vendible)) {
+            throw new RuntimeException("Una publicación de venta debe ser vendible.");
         }
-    }
-
-    private boolean valorDefaultTrue(Boolean value) {
-        return value == null || Boolean.TRUE.equals(value);
+        if (Boolean.TRUE.equals(intercambiable)) {
+            throw new RuntimeException(
+                    "Una skin publicada para vender no puede usarse también como intercambio.");
+        }
     }
 
     private Skin.Exterior exteriorDesdeMarketHashName(String marketHashName) {

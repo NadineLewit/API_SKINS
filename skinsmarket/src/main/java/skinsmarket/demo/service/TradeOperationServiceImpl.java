@@ -456,7 +456,7 @@ public class TradeOperationServiceImpl implements TradeOperationService {
             if (skin.getStock() == null || skin.getStock() < 1) {
                 throw new RuntimeException("La skin '" + skin.getName() + "' ya fue reservada o vendida");
             }
-            if (Boolean.FALSE.equals(skin.getIntercambiable())) {
+            if (Boolean.FALSE.equals(skin.getIntercambiable()) || Boolean.TRUE.equals(skin.getVendible())) {
                 throw new RuntimeException("La skin '" + skin.getName() + "' no está habilitada para intercambio");
             }
             if (skin.getCatalogo() == null) {

@@ -239,7 +239,7 @@ public class SkinController {
                 return ResponseEntity.status(404)
                         .body(ApiResponse.of("Skin no encontrada con id: " + id));
             }
-            return ResponseEntity.ok(ApiResponse.of("Skin inactivada exitosamente"));
+            return ResponseEntity.ok(ApiResponse.of("Publicación retirada. El bot devolverá la skin al inventario."));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(ApiResponse.of(e.getMessage()));
         }

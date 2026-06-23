@@ -21,9 +21,9 @@ public class PublicarDesdeInventarioRequest {
     /** Descuento opcional (0.0 a 1.0). Default 0. */
     private Double discount;
 
-    /** Si esta publicación acepta intercambio. Default true. */
+    /** Debe ser false: una skin publicada para venta queda en custodia del bot. */
     private Boolean intercambiable;
 
-    /** Si esta publicación se puede comprar por carrito/Mercado Pago. Default true. */
+    /** Debe ser true: este endpoint publica skins para venta. */
     private Boolean vendible;
 }

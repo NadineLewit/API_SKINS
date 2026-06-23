@@ -11,6 +11,7 @@ import skinsmarket.demo.exception.InvalidDiscountException;
 import skinsmarket.demo.exception.NegativePriceException;
 import skinsmarket.demo.exception.NegativeStockException;
 import skinsmarket.demo.repository.CarritoRepository;
+import skinsmarket.demo.repository.InventarioItemRepository;
 import skinsmarket.demo.repository.ItemCarritoRepository;
 import skinsmarket.demo.repository.SkinCatalogoRepository;
 import skinsmarket.demo.repository.SkinRepository;
@@ -40,6 +41,7 @@ public class SkinServiceImpl implements SkinService {
     @Autowired private SkinCatalogoRepository skinCatalogoRepository;
     @Autowired private ItemCarritoRepository itemCarritoRepository;
     @Autowired private CarritoRepository carritoRepository;
+    @Autowired private InventarioItemRepository inventarioItemRepository;
 
     @Override
     public Skin getSkinById(Long id) {
@@ -167,7 +169,8 @@ public class SkinServiceImpl implements SkinService {
                 .filter(s -> {
                     Skin.EstadoPublicacion estado = estadoNormalizado(s);
                     return estado == Skin.EstadoPublicacion.PUBLICADA ||
-                            estado == Skin.EstadoPublicacion.PAUSADA;
+                            (estado == Skin.EstadoPublicacion.PAUSADA &&
+                                    s.getStock() != null && s.getStock() > 0);
                 })
                 .toList();
     }
@@ -208,9 +211,12 @@ public class SkinServiceImpl implements SkinService {
                 throw new RuntimeException("No tenés permiso para inactivar esta skin");
             }
             if (noEsPausable(skin)) {
-                throw new RuntimeException("No se puede pausar una publicación vendida, reservada o eliminada por admin");
+                throw new RuntimeException("No se puede retirar una publicación vendida, reservada o eliminada por admin");
             }
+            quitarDeCarritos(skin);
+            liberarInventarioItem(skin);
             skin.setActive(false);
+            skin.setStock(0);
             skin.setEstadoPublicacion(Skin.EstadoPublicacion.PAUSADA);
             skinRepository.save(skin);
             return true;
@@ -235,6 +241,17 @@ public class SkinServiceImpl implements SkinService {
                 throw new RuntimeException("No se puede activar una publicación vendida, reservada o eliminada por admin");
             }
             validarPerfilVendedorSiExiste(skin);
+            InventarioItem item = skin.getInventarioItem();
+            if (item == null && skin.getSteamAssetId() != null && !skin.getSteamAssetId().isBlank()) {
+                throw new RuntimeException("Esta skin fue devuelta al inventario. Volvé a publicarla desde Inventario.");
+            }
+            if (item != null) {
+                if (Boolean.TRUE.equals(item.getPublicado())) {
+                    throw new RuntimeException("Este item ya está publicado a la venta");
+                }
+                item.setPublicado(true);
+                inventarioItemRepository.save(item);
+            }
             skin.setActive(true);
             skin.setStock(1);
             skin.setEstadoPublicacion(Skin.EstadoPublicacion.PUBLICADA);
@@ -276,8 +293,7 @@ public class SkinServiceImpl implements SkinService {
         skin.setPrice(req.getPrice());
         skin.setDiscount(discount);
         skin.setStock(1);
-        skin.setIntercambiable(valorDefaultTrue(req.getIntercambiable()));
-        skin.setVendible(valorDefaultTrue(req.getVendible()));
+        aplicarDisponibilidad(skin, req.getIntercambiable(), req.getVendible());
         skin.setActive(true);
         skin.setEstadoPublicacion(Skin.EstadoPublicacion.PUBLICADA);
         skin.setFechaAlta(LocalDateTime.now());
@@ -327,13 +343,6 @@ public class SkinServiceImpl implements SkinService {
         if (!InfoValidator.isValidPrice(req.getPrice())) throw new NegativePriceException();
         double d = req.getDiscount() != null ? req.getDiscount() : 0.0;
         if (!InfoValidator.isValidDiscount(d)) throw new InvalidDiscountException();
-        if (req.getIntercambiable() != null || req.getVendible() != null) {
-            boolean intercambiable = valorDefaultTrue(req.getIntercambiable());
-            boolean vendible = valorDefaultTrue(req.getVendible());
-            if (!intercambiable && !vendible) {
-                throw new RuntimeException("La skin debe ser intercambiable, vendible o ambas.");
-            }
-        }
     }
 
     private SkinCatalogo resolverCatalogo(SkinRequest req) {
@@ -366,9 +375,7 @@ public class SkinServiceImpl implements SkinService {
         if (req.getVendible() != null) {
             skin.setVendible(req.getVendible());
         }
-        if (!Boolean.TRUE.equals(skin.getIntercambiable()) && !Boolean.TRUE.equals(skin.getVendible())) {
-            throw new RuntimeException("La skin debe ser intercambiable, vendible o ambas.");
-        }
+        validarDisponibilidadExclusiva(skin.getIntercambiable(), skin.getVendible());
 
         if (req.getRareza() != null && !req.getRareza().isBlank()) {
             skin.setRareza(Skin.Rareza.valueOf(req.getRareza().toUpperCase()));
@@ -381,8 +388,20 @@ public class SkinServiceImpl implements SkinService {
         }
     }
 
-    private boolean valorDefaultTrue(Boolean value) {
-        return value == null || Boolean.TRUE.equals(value);
+    private void aplicarDisponibilidad(Skin skin, Boolean intercambiable, Boolean vendible) {
+        boolean vendibleValue = vendible == null || Boolean.TRUE.equals(vendible);
+        boolean intercambiableValue = Boolean.TRUE.equals(intercambiable);
+        validarDisponibilidadExclusiva(intercambiableValue, vendibleValue);
+        skin.setIntercambiable(intercambiableValue);
+        skin.setVendible(vendibleValue);
+    }
+
+    private void validarDisponibilidadExclusiva(Boolean intercambiable, Boolean vendible) {
+        boolean esIntercambiable = Boolean.TRUE.equals(intercambiable);
+        boolean esVendible = Boolean.TRUE.equals(vendible);
+        if (esIntercambiable == esVendible) {
+            throw new RuntimeException("La skin debe ser vendible o intercambiable, no ambas.");
+        }
     }
 
     private boolean noEsPausable(Skin skin) {
@@ -409,6 +428,12 @@ public class SkinServiceImpl implements SkinService {
         InventarioItem item = skin.getInventarioItem();
         if (item == null) return;
         item.setPublicado(false);
+        item.setInventoryStatus(InventarioItem.STATUS_STEAM);
+        item.setPendingOrderId(null);
+        item.setPendingSkinId(null);
+        item.setPendingUntil(null);
+        item.setDeliveredAt(LocalDateTime.now());
+        inventarioItemRepository.save(item);
         skin.setInventarioItem(null);
     }
 
@@ -429,7 +454,9 @@ public class SkinServiceImpl implements SkinService {
     private List<Skin> aplicarFiltrosOperacion(
             List<Skin> skins, Boolean intercambiable, Boolean vendible) {
         return skins.stream()
-                .filter(s -> intercambiable == null || Boolean.TRUE.equals(s.getIntercambiable()) == intercambiable)
+                .filter(s -> intercambiable == null ||
+                        (Boolean.TRUE.equals(s.getIntercambiable()) &&
+                                !Boolean.TRUE.equals(s.getVendible())) == intercambiable)
                 .filter(s -> vendible == null || Boolean.TRUE.equals(s.getVendible()) == vendible)
                 .toList();
     }
