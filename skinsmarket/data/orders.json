@@ -346,4 +346,16 @@
   "createdAt" : "2026-06-24T17:21:22.740495",
   "updatedAt" : "2026-06-24T17:21:32.8178474",
   "mockMode" : "true"
+}, {
+  "orderId" : 81,
+  "operationType" : "EXCHANGE",
+  "status" : "COMPLETED",
+  "direction" : "USER_TO_BOT",
+  "partnerSteamId64" : "76561198365646136",
+  "partnerTradeUrl" : "https://steamcommunity.com/tradeoffer/new/?partner=405380408&token=z7rw-4l7",
+  "assetIds" : [ "PURCHASE-80-33" ],
+  "botTradeOfferId" : null,
+  "createdAt" : "2026-06-24T19:54:55.497476",
+  "updatedAt" : "2026-06-24T19:55:15.241707",
+  "mockMode" : "true"
 } ]
