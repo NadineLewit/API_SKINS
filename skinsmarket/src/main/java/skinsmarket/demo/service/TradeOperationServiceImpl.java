@@ -31,9 +31,9 @@ import java.math.RoundingMode;
  * llama a este service vía createBotOrderForPurchase() para que el bot prepare
  * la entrega de las skins compradas.
  *
- * El precio "de mercado" de las skins del USER en un intercambio se calcula
- * con calcularValorSkinsUsuario(): busca el precio promedio del marketplace
- * para el mismo marketHashName, con default $1.00 si no hay publicaciones.
+ * El precio de intercambio se estima desde Steam Community Market y se le
+ * descuenta el margen configurado (8% por default). Si Steam no responde, se
+ * usa el precio local como fallback.
  */
 @Service
 public class TradeOperationServiceImpl implements TradeOperationService {
@@ -46,6 +46,7 @@ public class TradeOperationServiceImpl implements TradeOperationService {
     @Autowired private InventarioItemRepository inventarioItemRepository;
     @Autowired private SkinRepository skinRepository;
     @Autowired private BotTradeOrdersFileService botFileService;
+    @Autowired private SteamMarketPriceService steamMarketPriceService;
 
     private final ObjectMapper mapper = new ObjectMapper();
 
@@ -62,7 +63,7 @@ public class TradeOperationServiceImpl implements TradeOperationService {
         TradeProfileValidator.requireAliasCobro(user, "vender");
 
         if (user.getSteamId64() == null || user.getSteamId64().isBlank()) {
-            throw new RuntimeException("Debés configurar tu SteamID64 antes de vender");
+            throw new RuntimeException("Iniciá sesión con Steam antes de vender");
         }
         if (request.getInventarioItemIds() == null || request.getInventarioItemIds().isEmpty()) {
             throw new RuntimeException("Tenés que seleccionar al menos un item para vender");
@@ -146,7 +147,7 @@ public class TradeOperationServiceImpl implements TradeOperationService {
         if (diferenciaAPagar > saldoActual) {
             double faltante = diferenciaAPagar - saldoActual;
             throw new RuntimeException(String.format(
-                    "Saldo insuficiente. Te faltan $%.2f USD para realizar el intercambio.",
+                    "Saldo insuficiente. Te faltan $%.2f para realizar el intercambio.",
                     faltante));
         }
 
@@ -177,7 +178,7 @@ public class TradeOperationServiceImpl implements TradeOperationService {
             OrderDetail d = new OrderDetail();
             d.setSkin(skin);
             d.setQuantity(1);
-            d.setUnitPrice(precioPromedioMarketplace(skin));
+            d.setUnitPrice(precioSteamMarketplace(skin));
             order.addOrderDetail(d);
         }
 
@@ -211,8 +212,8 @@ public class TradeOperationServiceImpl implements TradeOperationService {
 
     @Override
     @Transactional(readOnly = true)
-    public double estimateInventoryItemPrice(InventarioItem item) {
-        return precioPromedioMarketplace(item);
+    public Double estimateInventoryItemPrice(InventarioItem item) {
+        return steamMarketPriceService.findInventoryItemPriceUsd(item).orElse(null);
     }
 
     // =========================================================================
@@ -407,7 +408,7 @@ public class TradeOperationServiceImpl implements TradeOperationService {
         TradeProfileValidator.requireTradeUrl(user, "intercambiar");
 
         if (user.getSteamId64() == null || user.getSteamId64().isBlank()) {
-            throw new RuntimeException("Debés configurar tu SteamID64 antes de intercambiar");
+            throw new RuntimeException("Iniciá sesión con Steam antes de intercambiar");
         }
         if (request.getInventarioItemIds() == null || request.getInventarioItemIds().isEmpty()) {
             throw new RuntimeException("Tenés que ofrecer al menos una skin propia");
@@ -438,7 +439,7 @@ public class TradeOperationServiceImpl implements TradeOperationService {
                 throw new RuntimeException("El item '" + item.getName() + "' está en otra operación activa");
             }
             userAssetIds.add(item.getAssetId());
-            valorUsuario += precioPromedioMarketplace(item);
+            valorUsuario += precioSteamMarketplace(item);
         }
 
         List<Skin> skinsMarketplace = new ArrayList<>();
@@ -456,7 +457,7 @@ public class TradeOperationServiceImpl implements TradeOperationService {
             if (skin.getStock() == null || skin.getStock() < 1) {
                 throw new RuntimeException("La skin '" + skin.getName() + "' ya fue reservada o vendida");
             }
-            if (Boolean.FALSE.equals(skin.getIntercambiable()) || Boolean.TRUE.equals(skin.getVendible())) {
+            if (Boolean.FALSE.equals(skin.getIntercambiable()) && Boolean.FALSE.equals(skin.getVendible())) {
                 throw new RuntimeException("La skin '" + skin.getName() + "' no está habilitada para intercambio");
             }
             if (skin.getCatalogo() == null) {
@@ -471,7 +472,7 @@ public class TradeOperationServiceImpl implements TradeOperationService {
                 throw new RuntimeException("No podés intercambiar por una skin que vos mismo publicaste");
             }
             skinsMarketplace.add(skin);
-            valorMarketplace += precioPromedioMarketplace(skin);
+            valorMarketplace += precioSteamMarketplace(skin);
         }
 
         double diferencia = valorMarketplace - valorUsuario;
@@ -480,36 +481,18 @@ public class TradeOperationServiceImpl implements TradeOperationService {
     }
 
     /**
-     * Calcula el precio promedio de publicaciones equivalentes. Si no hay
-     * comparables, usa el precio de la publicación puntual como fallback.
+     * Calcula precio Steam Community Market - margen. El precio local queda
+     * como fallback si Steam no tiene precio para ese market_hash_name.
      */
-    private double precioPromedioMarketplace(Skin skin) {
+    private double precioSteamMarketplace(Skin skin) {
         if (skin == null) return PRECIO_DEFAULT_SKIN;
         double fallback = skin.getFinalPrice() != null ? skin.getFinalPrice() : PRECIO_DEFAULT_SKIN;
-        return precioPromedioMarketplace(
-                skin.getCatalogo() != null ? skin.getCatalogo().getId() : null,
-                skin.getExterior(),
-                Boolean.TRUE.equals(skin.getStattrak()),
-                fallback);
+        return steamMarketPriceService.estimateSkinPriceUsd(skin, fallback);
     }
 
-    private double precioPromedioMarketplace(InventarioItem item) {
+    private double precioSteamMarketplace(InventarioItem item) {
         if (item == null) return PRECIO_DEFAULT_SKIN;
-        return precioPromedioMarketplace(
-                item.getCatalogo() != null ? item.getCatalogo().getId() : null,
-                exteriorDesdeMarketHashName(item.getMarketHashName()),
-                esStatTrak(item.getMarketHashName()),
-                PRECIO_DEFAULT_SKIN);
-    }
-
-    private double precioPromedioMarketplace(
-            Long catalogoId, Skin.Exterior exterior, boolean stattrak, double fallback) {
-        List<Skin> publicaciones = skinRepository.findPublicacionesComparables(
-                catalogoId, exterior, stattrak);
-        if (publicaciones.isEmpty()) return fallback;
-        double sum = 0;
-        for (Skin s : publicaciones) sum += s.getFinalPrice();
-        return sum / publicaciones.size();
+        return steamMarketPriceService.estimateInventoryItemPriceUsd(item, PRECIO_DEFAULT_SKIN);
     }
 
     private Skin.Exterior exteriorDesdeMarketHashName(String marketHashName) {

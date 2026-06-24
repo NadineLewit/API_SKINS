@@ -11,8 +11,6 @@ import com.mercadopago.client.preference.PreferenceItemRequest;
 import com.mercadopago.client.preference.PreferencePayerRequest;
 import com.mercadopago.client.preference.PreferenceRequest;
 import com.mercadopago.core.MPRequestOptions;
-import com.mercadopago.net.MPResultsResourcesPage;
-import com.mercadopago.net.MPSearchRequest;
 import com.mercadopago.resources.payment.Payment;
 import com.mercadopago.resources.payment.PaymentStatus;
 import com.mercadopago.resources.preference.Preference;
@@ -22,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -210,7 +209,7 @@ public class PaymentServiceImpl implements PaymentService {
                 .title("Orden #" + order.getId() + " - Skins Market")
                 .description(buildDescription(order))
                 .quantity(1)
-                .unitPrice(BigDecimal.valueOf(paymentAmount(order)).setScale(2, RoundingMode.HALF_UP))
+                .unitPrice(BigDecimal.valueOf(mercadoPagoAmount(order)).setScale(2, RoundingMode.HALF_UP))
                 .currencyId(currencyId)
                 .build();
 
@@ -285,7 +284,7 @@ public class PaymentServiceImpl implements PaymentService {
         MercadoPagoConfig.setAccessToken(accessToken);
 
         PaymentCreateRequest.PaymentCreateRequestBuilder paymentBuilder = PaymentCreateRequest.builder()
-                .transactionAmount(BigDecimal.valueOf(paymentAmount(order)).setScale(2, RoundingMode.HALF_UP))
+                .transactionAmount(BigDecimal.valueOf(mercadoPagoAmount(order)).setScale(2, RoundingMode.HALF_UP))
                 .token(blankToNull(request.getToken()))
                 .description(firstNonBlank(request.getDescription(), buildDescription(order)))
                 .installments(request.getInstallments() != null ? request.getInstallments() : 1)
@@ -389,7 +388,7 @@ public class PaymentServiceImpl implements PaymentService {
         double balance = roundMoney(user.getSaldo() != null ? user.getSaldo() : 0.0);
         if (balance < total) {
             throw new RuntimeException(String.format(
-                    "Saldo insuficiente. Te faltan $%.2f USD.", roundMoney(total - balance)));
+                    "Saldo insuficiente. Te faltan $%.2f.", roundMoney(total - balance)));
         }
 
         user.setSaldo(roundMoney(balance - total));
@@ -481,15 +480,15 @@ public class PaymentServiceImpl implements PaymentService {
 
         MercadoPagoConfig.setAccessToken(accessToken);
 
-        Payment payment = null;
+        MpPaymentSnapshot payment = null;
         if (order.getMercadopagoPaymentId() != null) {
-            payment = new PaymentClient().get(order.getMercadopagoPaymentId());
+            payment = findPaymentById(order.getMercadopagoPaymentId());
         } else {
             payment = findPaymentByExternalReference(order.getId().toString());
         }
 
         if (payment != null) {
-            updateOrderWithPayment(order, payment);
+            updateOrderWithPaymentSnapshot(order, payment);
             return mapToBrickPaymentResponse(order, payment);
         }
 
@@ -529,14 +528,14 @@ public class PaymentServiceImpl implements PaymentService {
 
         BrickPaymentResponse latestResponse = null;
         for (Order pendingOrder : pendingOrders) {
-            Payment payment = findPaymentByExternalReference(pendingOrder.getId().toString());
+            MpPaymentSnapshot payment = findPaymentByExternalReference(pendingOrder.getId().toString());
             if (payment == null) continue;
 
-            updateOrderWithPayment(pendingOrder, payment);
+            updateOrderWithPaymentSnapshot(pendingOrder, payment);
             BrickPaymentResponse response = mapToBrickPaymentResponse(pendingOrder, payment);
             latestResponse = response;
 
-            if (PaymentStatus.APPROVED.equals(payment.getStatus())) {
+            if (PaymentStatus.APPROVED.equals(payment.status())) {
                 return response;
             }
         }
@@ -570,12 +569,14 @@ public class PaymentServiceImpl implements PaymentService {
             ensureConfigured();
             MercadoPagoConfig.setAccessToken(accessToken);
 
-            Payment payment = new PaymentClient().get(Long.valueOf(paymentId));
-            Long orderId = Long.valueOf(payment.getExternalReference());
+            MpPaymentSnapshot payment = findPaymentById(Long.valueOf(paymentId));
+            if (payment == null || payment.externalReference() == null) {
+                return;
+            }
 
-            orderRepository.findById(orderId).ifPresent(order -> {
-                updateOrderWithPayment(order, payment);
-            });
+            Long orderId = Long.valueOf(payment.externalReference());
+            orderRepository.findById(orderId).ifPresent(order ->
+                    updateOrderWithPaymentSnapshot(order, payment));
         } catch (Exception e) {
             throw new RuntimeException("No se pudo procesar la notificacion de Mercado Pago", e);
         }
@@ -588,6 +589,10 @@ public class PaymentServiceImpl implements PaymentService {
      */
     private void updateOrderWithPayment(Order order, Payment payment) {
         updateOrderPaymentState(order, payment.getId(), mapPaymentStatus(payment.getStatus()));
+    }
+
+    private void updateOrderWithPaymentSnapshot(Order order, MpPaymentSnapshot payment) {
+        updateOrderPaymentState(order, payment.id(), mapPaymentStatus(payment.status()));
     }
 
     private void updateOrderPaymentState(Order order, Long paymentId, String newStatus) {
@@ -631,22 +636,93 @@ public class PaymentServiceImpl implements PaymentService {
         }
     }
 
-    private Payment findPaymentByExternalReference(String externalReference) throws Exception {
-        MPSearchRequest searchRequest = MPSearchRequest.builder()
-                .limit(10)
-                .offset(0)
-                .filters(Map.of("external_reference", externalReference))
-                .build();
+    private MpPaymentSnapshot findPaymentById(Long paymentId) {
+        if (paymentId == null) return null;
+        String url = "https://api.mercadopago.com/v1/payments/" + paymentId;
+        return snapshotFromMap(mercadoPagoGet(url));
+    }
 
-        MPResultsResourcesPage<Payment> payments = new PaymentClient().search(searchRequest);
-        if (payments.getResults() == null || payments.getResults().isEmpty()) {
+    private MpPaymentSnapshot findPaymentByExternalReference(String externalReference) {
+        String url = UriComponentsBuilder
+                .fromUriString("https://api.mercadopago.com/v1/payments/search")
+                .queryParam("external_reference", externalReference)
+                .queryParam("sort", "date_created")
+                .queryParam("criteria", "desc")
+                .queryParam("limit", 10)
+                .encode()
+                .toUriString();
+
+        Map<String, Object> body = mercadoPagoGet(url);
+        Object results = body != null ? body.get("results") : null;
+        if (!(results instanceof List<?> list) || list.isEmpty()) {
             return null;
         }
 
-        return payments.getResults().stream()
-                .filter((payment) -> PaymentStatus.APPROVED.equals(payment.getStatus()))
-                .findFirst()
-                .orElse(payments.getResults().get(0));
+        MpPaymentSnapshot first = null;
+        for (Object item : list) {
+            if (!(item instanceof Map<?, ?> raw)) continue;
+            MpPaymentSnapshot snapshot = snapshotFromMap(raw);
+            if (snapshot == null) continue;
+            if (first == null) first = snapshot;
+            if (PaymentStatus.APPROVED.equals(snapshot.status())) return snapshot;
+        }
+        return first;
+    }
+
+    private Map<String, Object> mercadoPagoGet(String url) {
+        try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(accessToken);
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    new HttpEntity<>(headers),
+                    Map.class);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> body = response.getBody();
+            return body;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private MpPaymentSnapshot snapshotFromMap(Map<?, ?> raw) {
+        if (raw == null || raw.isEmpty()) return null;
+        Long id = longValue(raw.get("id"));
+        String status = textValue(raw.get("status"));
+        if (status == null || status.isBlank()) return null;
+
+        String externalResourceUrl = null;
+        Object transactionDetails = raw.get("transaction_details");
+        if (transactionDetails instanceof Map<?, ?> details) {
+            externalResourceUrl = textValue(details.get("external_resource_url"));
+        }
+
+        return new MpPaymentSnapshot(
+                id,
+                textValue(raw.get("external_reference")),
+                status,
+                textValue(raw.get("status_detail")),
+                textValue(raw.get("payment_method_id")),
+                textValue(raw.get("payment_type_id")),
+                externalResourceUrl
+        );
+    }
+
+    private Long longValue(Object value) {
+        if (value instanceof Number number) return number.longValue();
+        if (value instanceof String text && !text.isBlank()) {
+            try {
+                return Long.valueOf(text);
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private String textValue(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     private BrickPaymentResponse mapToBrickPaymentResponse(Order order, Payment payment) {
@@ -661,6 +737,28 @@ public class PaymentServiceImpl implements PaymentService {
                         ? payment.getTransactionDetails().getExternalResourceUrl()
                         : null
         );
+    }
+
+    private BrickPaymentResponse mapToBrickPaymentResponse(Order order, MpPaymentSnapshot payment) {
+        return new BrickPaymentResponse(
+                mapToOrderResponse(order),
+                payment.id(),
+                payment.status(),
+                payment.statusDetail(),
+                payment.paymentMethodId(),
+                payment.paymentTypeId(),
+                payment.externalResourceUrl()
+        );
+    }
+
+    private record MpPaymentSnapshot(
+            Long id,
+            String externalReference,
+            String status,
+            String statusDetail,
+            String paymentMethodId,
+            String paymentTypeId,
+            String externalResourceUrl) {
     }
 
     private void validarPublicacionesDisponiblesParaPago(Order order) {
@@ -1026,6 +1124,14 @@ public class PaymentServiceImpl implements PaymentService {
             return order.getPriceDifference() != null ? Math.max(order.getPriceDifference(), 0.0) : 0.0;
         }
         return order.getTotalFinal() != null ? order.getTotalFinal() : 0.0;
+    }
+
+    private double mercadoPagoAmount(Order order) {
+        double amount = paymentAmount(order);
+        if (order.getOperationType() == OperationType.BALANCE_TOP_UP) {
+            return amount;
+        }
+        return roundMoney(amount * usdToArs);
     }
 
     private double roundMoney(double value) {

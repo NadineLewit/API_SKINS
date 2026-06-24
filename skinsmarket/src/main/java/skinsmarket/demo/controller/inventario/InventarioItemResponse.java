@@ -29,6 +29,7 @@ public class InventarioItemResponse {
     private boolean pending;
     private long secondsUntilUnlock;
     private Double estimatedPrice;
+    private Boolean steamPriceAvailable;
 
     public static InventarioItemResponse from(InventarioItem item) {
         return from(item, null);
@@ -57,6 +58,7 @@ public class InventarioItemResponse {
         response.setPending(item.isPending());
         response.setSecondsUntilUnlock(item.getSecondsUntilUnlock());
         response.setEstimatedPrice(estimatedPrice);
+        response.setSteamPriceAvailable(estimatedPrice != null);
         return response;
     }
 }

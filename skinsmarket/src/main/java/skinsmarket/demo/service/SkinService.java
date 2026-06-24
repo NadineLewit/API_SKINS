@@ -35,6 +35,8 @@ public interface SkinService {
 
     boolean deleteSkinAsVendedor(Long id, String email);
 
+    boolean pauseSkinAsVendedor(Long id, String email);
+
     boolean activateSkinAsVendedor(Long id, String email);
 
     List<Skin> getHistorialSkinsByOwner(String email);

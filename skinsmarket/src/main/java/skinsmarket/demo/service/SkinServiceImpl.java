@@ -42,13 +42,14 @@ public class SkinServiceImpl implements SkinService {
     @Autowired private ItemCarritoRepository itemCarritoRepository;
     @Autowired private CarritoRepository carritoRepository;
     @Autowired private InventarioItemRepository inventarioItemRepository;
+    @Autowired private SteamMarketPriceService steamMarketPriceService;
 
     @Override
     public Skin getSkinById(Long id) {
-        return skinRepository.findPublicadaDisponibleById(
+        return withEstimatedTradePrice(skinRepository.findPublicadaDisponibleById(
                         id, STOCK_DISPONIBLE_MINIMO)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Skin no encontrada o no disponible: " + id));
+                        "Skin no encontrada o no disponible: " + id)));
     }
 
     @Override
@@ -118,61 +119,61 @@ public class SkinServiceImpl implements SkinService {
 
     @Override
     public List<Skin> getAllSkins(boolean includeInactive) {
-        if (includeInactive) return skinRepository.findAll();
-        return skinRepository.findByActiveTrue();
+        if (includeInactive) return withEstimatedTradePrices(skinRepository.findAll());
+        return withEstimatedTradePrices(skinRepository.findByActiveTrue());
     }
 
     @Override
     public List<Skin> getAllAvailableSkins(Boolean intercambiable, Boolean vendible) {
-        return aplicarFiltrosOperacion(
+        return withEstimatedTradePrices(aplicarFiltrosOperacion(
                 skinRepository.findPublicadasDisponibles(STOCK_DISPONIBLE_MINIMO),
                 intercambiable,
-                vendible);
+                vendible));
     }
 
     @Override
     public List<Skin> getSkinsByCategoryName(String categoryName) {
-        return skinRepository
+        return withEstimatedTradePrices(skinRepository
                 .findPublicadasDisponiblesByCategoryName(
-                        categoryName, STOCK_DISPONIBLE_MINIMO);
+                        categoryName, STOCK_DISPONIBLE_MINIMO));
     }
 
     @Override
     public List<Skin> findByRangePrice(Double min, Double max) {
-        return skinRepository.findPublicadasDisponiblesByPriceBetween(
-                min, max, STOCK_DISPONIBLE_MINIMO);
+        return withEstimatedTradePrices(skinRepository.findPublicadasDisponiblesByPriceBetween(
+                min, max, STOCK_DISPONIBLE_MINIMO));
     }
 
     @Override
     public List<Skin> findByPriceMax(Double max) {
-        return skinRepository.findPublicadasDisponiblesByPriceLessThanEqual(
-                max, STOCK_DISPONIBLE_MINIMO);
+        return withEstimatedTradePrices(skinRepository.findPublicadasDisponiblesByPriceLessThanEqual(
+                max, STOCK_DISPONIBLE_MINIMO));
     }
 
     @Override
     public List<Skin> findByPriceMin(Double min) {
-        return skinRepository.findPublicadasDisponiblesByPriceGreaterThanEqual(
-                min, STOCK_DISPONIBLE_MINIMO);
+        return withEstimatedTradePrices(skinRepository.findPublicadasDisponiblesByPriceGreaterThanEqual(
+                min, STOCK_DISPONIBLE_MINIMO));
     }
 
     @Override
     public List<Skin> findByName(String name) {
-        return skinRepository.findPublicadasDisponiblesByName(
-                name, STOCK_DISPONIBLE_MINIMO);
+        return withEstimatedTradePrices(skinRepository.findPublicadasDisponiblesByName(
+                name, STOCK_DISPONIBLE_MINIMO));
     }
 
     @Override
     public List<Skin> getSkinsByOwner(String email) {
         User vendedor = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado: " + email));
-        return skinRepository.findByVendedor(vendedor).stream()
+        return withEstimatedTradePrices(skinRepository.findByVendedor(vendedor).stream()
                 .filter(s -> {
                     Skin.EstadoPublicacion estado = estadoNormalizado(s);
                     return estado == Skin.EstadoPublicacion.PUBLICADA ||
                             (estado == Skin.EstadoPublicacion.PAUSADA &&
                                     s.getStock() != null && s.getStock() > 0);
                 })
-                .toList();
+                .toList());
     }
 
     @Override
@@ -194,7 +195,7 @@ public class SkinServiceImpl implements SkinService {
                 throw new RuntimeException("No se puede editar una publicación eliminada por admin");
             }
             aplicarCampos(skin, req);
-            return skinRepository.save(skin);
+            return withEstimatedTradePrice(skinRepository.save(skin));
         }).orElse(null);
     }
 
@@ -225,6 +226,30 @@ public class SkinServiceImpl implements SkinService {
 
     @Override
     @Transactional
+    public boolean pauseSkinAsVendedor(Long id, String email) {
+        return skinRepository.findById(id).map(skin -> {
+            User usuario = userRepository.findByEmail(email)
+                    .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado"));
+            boolean esAdmin = usuario.getRole().name().equals("ADMIN");
+            boolean esVendedor = skin.getVendedor() != null
+                    && skin.getVendedor().getEmail().equals(email);
+            if (!esAdmin && !esVendedor) {
+                throw new RuntimeException("No tenés permiso para pausar esta skin");
+            }
+            if (noEsPausable(skin)) {
+                throw new RuntimeException("No se puede pausar una publicación vendida, reservada o eliminada");
+            }
+            quitarDeCarritos(skin);
+            skin.setActive(false);
+            skin.setStock(1);
+            skin.setEstadoPublicacion(Skin.EstadoPublicacion.PAUSADA);
+            skinRepository.save(skin);
+            return true;
+        }).orElse(false);
+    }
+
+    @Override
+    @Transactional
     public boolean activateSkinAsVendedor(Long id, String email) {
         return skinRepository.findById(id).map(skin -> {
             User usuario = userRepository.findByEmail(email)
@@ -245,10 +270,7 @@ public class SkinServiceImpl implements SkinService {
             if (item == null && skin.getSteamAssetId() != null && !skin.getSteamAssetId().isBlank()) {
                 throw new RuntimeException("Esta skin fue devuelta al inventario. Volvé a publicarla desde Inventario.");
             }
-            if (item != null) {
-                if (Boolean.TRUE.equals(item.getPublicado())) {
-                    throw new RuntimeException("Este item ya está publicado a la venta");
-                }
+            if (item != null && !Boolean.TRUE.equals(item.getPublicado())) {
                 item.setPublicado(true);
                 inventarioItemRepository.save(item);
             }
@@ -264,14 +286,14 @@ public class SkinServiceImpl implements SkinService {
     public List<Skin> getHistorialSkinsByOwner(String email) {
         User vendedor = userRepository.findByEmail(email)
                 .orElseThrow(() -> new IllegalArgumentException("Usuario no encontrado: " + email));
-        return skinRepository.findByVendedor(vendedor).stream()
+        return withEstimatedTradePrices(skinRepository.findByVendedor(vendedor).stream()
                 .filter(s -> {
                     Skin.EstadoPublicacion estado = estadoNormalizado(s);
                     return estado == Skin.EstadoPublicacion.RESERVADA ||
                             estado == Skin.EstadoPublicacion.VENDIDA ||
                             estado == Skin.EstadoPublicacion.ELIMINADA_ADMIN;
                 })
-                .toList();
+                .toList());
     }
 
     // =========================================================================
@@ -320,7 +342,7 @@ public class SkinServiceImpl implements SkinService {
         }
         skin.setStattrak(Boolean.TRUE.equals(req.getStattrak()));
 
-        return skinRepository.save(skin);
+        return withEstimatedTradePrice(skinRepository.save(skin));
     }
 
     private void validarPerfilVendedorSiExiste(Skin skin) {
@@ -334,7 +356,7 @@ public class SkinServiceImpl implements SkinService {
 
         return skinRepository.findById(id).map(skin -> {
             aplicarCampos(skin, req);
-            return skinRepository.save(skin);
+            return withEstimatedTradePrice(skinRepository.save(skin));
         }).orElse(null);
     }
 
@@ -449,6 +471,22 @@ public class SkinServiceImpl implements SkinService {
         }
         skin.setEstadoPublicacion(estado);
         return estado;
+    }
+
+    private List<Skin> withEstimatedTradePrices(List<Skin> skins) {
+        skins.forEach(this::withEstimatedTradePrice);
+        return skins;
+    }
+
+    private Skin withEstimatedTradePrice(Skin skin) {
+        if (skin == null) return null;
+        double fallback = skin.getFinalPrice() != null ? skin.getFinalPrice() : skin.getPrice();
+        if (fallback > 1.01) {
+            skin.setEstimatedTradePrice(fallback);
+            return skin;
+        }
+        skin.setEstimatedTradePrice(steamMarketPriceService.estimateSkinPriceUsd(skin, fallback));
+        return skin;
     }
 
     private List<Skin> aplicarFiltrosOperacion(

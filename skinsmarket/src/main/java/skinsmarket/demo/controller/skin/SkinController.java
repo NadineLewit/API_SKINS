@@ -245,6 +245,20 @@ public class SkinController {
         }
     }
 
+    @PutMapping("/{id}/pausar")
+    public ResponseEntity<?> pausarMiSkin(Authentication auth, @PathVariable Long id) {
+        try {
+            boolean paused = skinService.pauseSkinAsVendedor(id, auth.getName());
+            if (!paused) {
+                return ResponseEntity.status(404)
+                        .body(ApiResponse.of("Skin no encontrada con id: " + id));
+            }
+            return ResponseEntity.ok(ApiResponse.of("Publicación pausada. Podés reactivarla desde Mis publicaciones."));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(ApiResponse.of(e.getMessage()));
+        }
+    }
+
     @PutMapping("/{id}/activar")
     public ResponseEntity<?> activarMiSkin(Authentication auth, @PathVariable Long id) {
         try {

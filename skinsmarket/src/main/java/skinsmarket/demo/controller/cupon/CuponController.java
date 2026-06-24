@@ -33,9 +33,14 @@ public class CuponController {
      */
     @GetMapping("/validar")
     public ResponseEntity<?> validarCupon(
-            @RequestParam String codigo) throws CuponInvalidoException {
-        Cupon cupon = cuponService.validar(codigo);
-        return ResponseEntity.ok(ApiResponse.of("Cupón válido", cupon));
+            @RequestParam String codigo) {
+        try {
+            Cupon cupon = cuponService.validar(codigo);
+            return ResponseEntity.ok(ApiResponse.of("Cupón válido", cupon));
+        } catch (CuponInvalidoException e) {
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.of("Cupón inválido, vencido o ya utilizado."));
+        }
     }
 
     /**

@@ -60,6 +60,7 @@ public class InventarioServiceImpl implements InventarioService {
     @Autowired private SkinCatalogoRepository skinCatalogoRepository;
     @Autowired private SkinRepository skinRepository;
     @Autowired private RestTemplate restTemplate;
+    @Autowired private SteamMarketPriceService steamMarketPriceService;
 
     @Override
     @Transactional
@@ -85,7 +86,7 @@ public class InventarioServiceImpl implements InventarioService {
 
         if (user.getSteamId64() == null || user.getSteamId64().isBlank()) {
             throw new RuntimeException(
-                    "Configurá tu SteamID64 en el perfil antes de sincronizar el inventario");
+                    "Iniciá sesión con Steam antes de sincronizar el inventario");
         }
 
         // 1. Pedir inventario a Steam
@@ -330,8 +331,15 @@ public class InventarioServiceImpl implements InventarioService {
             throw new RuntimeException(
                     "Este item no es tradeable en Steam (trade lock o intransferible).");
         }
-        if (request.getPrice() == null || request.getPrice() <= 0) {
+        double precioPublicacion = request.getPrice() != null
+                ? request.getPrice()
+                : steamMarketPriceService.estimatePriceUsd(item.getMarketHashName(), 1.0);
+        double descuento = request.getDiscount() != null ? request.getDiscount() : 0.0;
+        if (precioPublicacion <= 0) {
             throw new RuntimeException("El precio debe ser mayor a 0");
+        }
+        if (descuento < 0 || descuento > 1) {
+            throw new RuntimeException("El descuento debe estar entre 0 y 1");
         }
         validarPublicacionDeVenta(request.getIntercambiable(), request.getVendible());
 
@@ -339,12 +347,12 @@ public class InventarioServiceImpl implements InventarioService {
         LocalDateTime ahora = LocalDateTime.now();
 
         Skin skin = new Skin();
-        skin.setName(cat.getName());
-        skin.setDescription(cat.getDescription());
+        skin.setName(truncate(cat.getName(), 240));
+        skin.setDescription(truncate(cat.getDescription(), 240));
         skin.setGame("CS2");
         skin.setImageUrl(cat.getImageUrl());
-        skin.setPrice(request.getPrice());
-        skin.setDiscount(request.getDiscount() != null ? request.getDiscount() : 0.0);
+        skin.setPrice(precioPublicacion);
+        skin.setDiscount(descuento);
         skin.setStock(1);
         skin.setIntercambiable(false);
         skin.setVendible(true);
@@ -366,6 +374,11 @@ public class InventarioServiceImpl implements InventarioService {
         inventarioItemRepository.save(item);
 
         return saved;
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) return value;
+        return value.substring(0, maxLength);
     }
 
     private void validarPublicacionDeVenta(Boolean intercambiable, Boolean vendible) {

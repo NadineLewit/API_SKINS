@@ -30,7 +30,7 @@ public interface TradeOperationService {
     ExchangeQuoteResponse quoteExchange(String email, ExchangeRequest request);
 
     /** Estima el valor de una skin del inventario con la misma regla del intercambio. */
-    double estimateInventoryItemPrice(InventarioItem item);
+    Double estimateInventoryItemPrice(InventarioItem item);
 
     /** Cancela una operación. Si el USER ya entregó skins, genera una RETURN. */
     OperationStatusResponse cancelOperation(String email, Long orderId);

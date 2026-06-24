@@ -120,6 +120,9 @@ public class Skin {
     @Column(nullable = false)
     private Boolean stattrak = false;
 
+    @Transient
+    private Double estimatedTradePrice;
+
     public Double getFinalPrice() {
         return price - (price * discount);
     }

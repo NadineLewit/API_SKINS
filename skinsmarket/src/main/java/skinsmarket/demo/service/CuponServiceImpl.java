@@ -39,7 +39,12 @@ public class CuponServiceImpl implements CuponService {
     @Override
     public Cupon validar(String codigo) throws CuponInvalidoException {
         // 1. Buscar el cupón por código; si no existe lanzar excepción
-        Cupon cupon = cuponRepository.findByCodigo(codigo)
+        String codigoNormalizado = codigo == null ? "" : codigo.trim().toUpperCase();
+        if (codigoNormalizado.isBlank()) {
+            throw new CuponInvalidoException();
+        }
+
+        Cupon cupon = cuponRepository.findByCodigo(codigoNormalizado)
                 .orElseThrow(CuponInvalidoException::new);
 
         // 2. Verificar que el cupón esté activo

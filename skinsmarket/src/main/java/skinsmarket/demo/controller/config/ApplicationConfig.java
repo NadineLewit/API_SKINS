@@ -7,6 +7,7 @@ import org.springframework.http.client.ClientHttpRequestExecution;
 import org.springframework.http.client.ClientHttpRequestInterceptor;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.converter.StringHttpMessageConverter;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -22,6 +23,7 @@ import skinsmarket.demo.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 
 /**
@@ -85,6 +87,8 @@ public class ApplicationConfig {
         factory.setReadTimeout((int) Duration.ofSeconds(60).toMillis());
 
         RestTemplate restTemplate = new RestTemplate(factory);
+        restTemplate.getMessageConverters().removeIf(StringHttpMessageConverter.class::isInstance);
+        restTemplate.getMessageConverters().add(0, new StringHttpMessageConverter(StandardCharsets.UTF_8));
         restTemplate.getInterceptors().add(new SimpleUserAgentInterceptor());
         return restTemplate;
     }
