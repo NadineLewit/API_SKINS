@@ -58,6 +58,29 @@ public class OrderController {
     }
 
     /**
+     * Crea una orden directa sin usar el carrito persistido.
+     * POST /order/direct
+     * TOKEN: USER
+     *
+     * Se usa para "Comprar ahora": el frontend manda un itemList de una sola
+     * publicacion y el carrito real del usuario queda intacto.
+     */
+    @PostMapping("/direct")
+    public ResponseEntity<?> createDirectOrder(
+            Authentication auth,
+            @RequestBody OrderRequest request) {
+        try {
+            User user = userRepository.findByEmail(auth.getName())
+                    .orElseThrow(() -> new IllegalStateException("Usuario no encontrado"));
+            OrderResponse result = orderService.createOrder(user, request);
+            return ResponseEntity.status(201)
+                    .body(ApiResponse.of("Orden directa creada", result));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(ApiResponse.of(e.getMessage()));
+        }
+    }
+
+    /**
      * Historial de órdenes del usuario autenticado.
      * GET /order/me
      * TOKEN: USER

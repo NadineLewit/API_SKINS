@@ -179,42 +179,6 @@
   "updatedAt" : "2026-06-21T00:28:59.6263029",
   "mockMode" : "true"
 }, {
-  "orderId" : 25,
-  "operationType" : "PURCHASE",
-  "status" : "COMPLETED",
-  "direction" : "BOT_TO_USER",
-  "partnerSteamId64" : null,
-  "partnerTradeUrl" : null,
-  "assetIds" : [ "SKIN-110" ],
-  "botTradeOfferId" : null,
-  "createdAt" : "2026-06-21T00:32:02.7479087",
-  "updatedAt" : "2026-06-21T00:32:07.8584795",
-  "mockMode" : "true"
-}, {
-  "orderId" : 26,
-  "operationType" : "EXCHANGE",
-  "status" : "COMPLETED",
-  "direction" : "USER_TO_BOT",
-  "partnerSteamId64" : "76561198000000000",
-  "partnerTradeUrl" : "https://steamcommunity.com/tradeoffer/new/?partner=87654321&token=buyerDemoToken",
-  "assetIds" : [ "PURCHASE-24-108" ],
-  "botTradeOfferId" : null,
-  "createdAt" : "2026-06-21T00:33:50.5296759",
-  "updatedAt" : "2026-06-21T00:34:08.7193439",
-  "mockMode" : "true"
-}, {
-  "orderId" : 27,
-  "operationType" : "SALE",
-  "status" : "COMPLETED",
-  "direction" : "USER_TO_BOT",
-  "partnerSteamId64" : "76561198000000000",
-  "partnerTradeUrl" : "https://steamcommunity.com/tradeoffer/new/?partner=87654321&token=buyerDemoToken",
-  "assetIds" : [ "PURCHASE-25-110" ],
-  "botTradeOfferId" : null,
-  "createdAt" : "2026-06-21T00:41:51.2362388",
-  "updatedAt" : "2026-06-21T00:42:07.65789",
-  "mockMode" : "true"
-}, {
   "orderId" : 29,
   "operationType" : "PURCHASE",
   "status" : "COMPLETED",
@@ -227,18 +191,6 @@
   "updatedAt" : "2026-06-21T10:12:41.598966",
   "mockMode" : "true"
 }, {
-  "orderId" : 30,
-  "operationType" : "PURCHASE",
-  "status" : "COMPLETED",
-  "direction" : "BOT_TO_USER",
-  "partnerSteamId64" : "76561199021497777",
-  "partnerTradeUrl" : "https://steamcommunity.com/tradeoffer/new/?partner=1061232049&token=25m4Ulv0",
-  "assetIds" : [ "SKIN-9" ],
-  "botTradeOfferId" : null,
-  "createdAt" : "2026-06-21T10:13:32.2116455",
-  "updatedAt" : "2026-06-21T10:13:42.3981143",
-  "mockMode" : "true"
-}, {
   "orderId" : 31,
   "operationType" : "PURCHASE",
   "status" : "COMPLETED",
@@ -249,18 +201,6 @@
   "botTradeOfferId" : null,
   "createdAt" : "2026-06-21T10:14:07.7354888",
   "updatedAt" : "2026-06-21T10:14:17.9839797",
-  "mockMode" : "true"
-}, {
-  "orderId" : 32,
-  "operationType" : "PURCHASE",
-  "status" : "COMPLETED",
-  "direction" : "BOT_TO_USER",
-  "partnerSteamId64" : "76561199021497777",
-  "partnerTradeUrl" : "https://steamcommunity.com/tradeoffer/new/?partner=1061232049&token=25m4Ulv0",
-  "assetIds" : [ "SKIN-12" ],
-  "botTradeOfferId" : null,
-  "createdAt" : "2026-06-21T10:39:10.678998",
-  "updatedAt" : "2026-06-21T10:39:20.9458712",
   "mockMode" : "true"
 }, {
   "orderId" : 33,
@@ -309,5 +249,101 @@
   "botTradeOfferId" : null,
   "createdAt" : "2026-06-24T14:39:22.205286",
   "updatedAt" : "2026-06-24T14:39:32.318586",
+  "mockMode" : "true"
+}, {
+  "orderId" : 20,
+  "operationType" : "PURCHASE",
+  "status" : "COMPLETED",
+  "direction" : "BOT_TO_USER",
+  "partnerSteamId64" : "76561199021497777",
+  "partnerTradeUrl" : "https://steamcommunity.com/tradeoffer/new/?partner=1061232049&token=25m4Ulv0",
+  "assetIds" : [ "SKIN-17" ],
+  "botTradeOfferId" : null,
+  "createdAt" : "2026-06-24T15:29:34.0458714",
+  "updatedAt" : "2026-06-24T15:29:44.1406381",
+  "mockMode" : "true"
+}, {
+  "orderId" : 23,
+  "operationType" : "PURCHASE",
+  "status" : "COMPLETED",
+  "direction" : "BOT_TO_USER",
+  "partnerSteamId64" : "76561199021497777",
+  "partnerTradeUrl" : "https://steamcommunity.com/tradeoffer/new/?partner=1061232049&token=25m4Ulv0",
+  "assetIds" : [ "SKIN-29" ],
+  "botTradeOfferId" : null,
+  "createdAt" : "2026-06-24T16:30:00.7494749",
+  "updatedAt" : "2026-06-24T16:30:10.8758812",
+  "mockMode" : "true"
+}, {
+  "orderId" : 25,
+  "operationType" : "PURCHASE",
+  "status" : "COMPLETED",
+  "direction" : "BOT_TO_USER",
+  "partnerSteamId64" : "76561199021497777",
+  "partnerTradeUrl" : "https://steamcommunity.com/tradeoffer/new/?partner=1061232049&token=25m4Ulv0",
+  "assetIds" : [ "SKIN-20" ],
+  "botTradeOfferId" : null,
+  "createdAt" : "2026-06-24T16:32:46.4124027",
+  "updatedAt" : "2026-06-24T16:32:56.482278",
+  "mockMode" : "true"
+}, {
+  "orderId" : 26,
+  "operationType" : "PURCHASE",
+  "status" : "COMPLETED",
+  "direction" : "BOT_TO_USER",
+  "partnerSteamId64" : "76561199021497777",
+  "partnerTradeUrl" : "https://steamcommunity.com/tradeoffer/new/?partner=1061232049&token=25m4Ulv0",
+  "assetIds" : [ "SKIN-75" ],
+  "botTradeOfferId" : null,
+  "createdAt" : "2026-06-24T16:50:35.2893552",
+  "updatedAt" : "2026-06-24T16:50:45.3577992",
+  "mockMode" : "true"
+}, {
+  "orderId" : 27,
+  "operationType" : "PURCHASE",
+  "status" : "COMPLETED",
+  "direction" : "BOT_TO_USER",
+  "partnerSteamId64" : "76561199021497777",
+  "partnerTradeUrl" : "https://steamcommunity.com/tradeoffer/new/?partner=1061232049&token=25m4Ulv0",
+  "assetIds" : [ "SKIN-31" ],
+  "botTradeOfferId" : null,
+  "createdAt" : "2026-06-24T17:01:47.8756898",
+  "updatedAt" : "2026-06-24T17:01:57.938979",
+  "mockMode" : "true"
+}, {
+  "orderId" : 28,
+  "operationType" : "PURCHASE",
+  "status" : "COMPLETED",
+  "direction" : "BOT_TO_USER",
+  "partnerSteamId64" : "76561199021497777",
+  "partnerTradeUrl" : "https://steamcommunity.com/tradeoffer/new/?partner=1061232049&token=25m4Ulv0",
+  "assetIds" : [ "SKIN-32" ],
+  "botTradeOfferId" : null,
+  "createdAt" : "2026-06-24T17:12:00.2628667",
+  "updatedAt" : "2026-06-24T17:12:10.3252504",
+  "mockMode" : "true"
+}, {
+  "orderId" : 30,
+  "operationType" : "PURCHASE",
+  "status" : "COMPLETED",
+  "direction" : "BOT_TO_USER",
+  "partnerSteamId64" : "76561199021497777",
+  "partnerTradeUrl" : "https://steamcommunity.com/tradeoffer/new/?partner=1061232049&token=25m4Ulv0",
+  "assetIds" : [ "SKIN-24" ],
+  "botTradeOfferId" : null,
+  "createdAt" : "2026-06-24T17:14:40.9347149",
+  "updatedAt" : "2026-06-24T17:14:50.9929965",
+  "mockMode" : "true"
+}, {
+  "orderId" : 32,
+  "operationType" : "PURCHASE",
+  "status" : "COMPLETED",
+  "direction" : "BOT_TO_USER",
+  "partnerSteamId64" : "76561199021497777",
+  "partnerTradeUrl" : "https://steamcommunity.com/tradeoffer/new/?partner=1061232049&token=25m4Ulv0",
+  "assetIds" : [ "SKIN-39" ],
+  "botTradeOfferId" : null,
+  "createdAt" : "2026-06-24T17:21:22.740495",
+  "updatedAt" : "2026-06-24T17:21:32.8178474",
   "mockMode" : "true"
 } ]
