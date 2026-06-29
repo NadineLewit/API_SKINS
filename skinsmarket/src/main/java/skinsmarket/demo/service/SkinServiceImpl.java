@@ -481,10 +481,6 @@ public class SkinServiceImpl implements SkinService {
     private Skin withEstimatedTradePrice(Skin skin) {
         if (skin == null) return null;
         double fallback = skin.getFinalPrice() != null ? skin.getFinalPrice() : skin.getPrice();
-        if (fallback > 1.01) {
-            skin.setEstimatedTradePrice(fallback);
-            return skin;
-        }
         skin.setEstimatedTradePrice(steamMarketPriceService.estimateSkinPriceUsd(skin, fallback));
         return skin;
     }

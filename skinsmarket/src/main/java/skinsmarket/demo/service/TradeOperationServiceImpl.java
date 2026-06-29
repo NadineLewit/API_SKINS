@@ -31,9 +31,9 @@ import java.math.RoundingMode;
  * llama a este service vía createBotOrderForPurchase() para que el bot prepare
  * la entrega de las skins compradas.
  *
- * El precio de intercambio se estima desde Steam Community Market y se le
- * descuenta el margen configurado (8% por default). Si Steam no responde, se
- * usa el precio local como fallback.
+ * El precio de intercambio se estima desde el feed externo de precios y se le
+ * descuenta el margen configurado (8% por default). Si el feed no trae precio,
+ * se usa el precio local como fallback.
  */
 @Service
 public class TradeOperationServiceImpl implements TradeOperationService {
@@ -481,8 +481,8 @@ public class TradeOperationServiceImpl implements TradeOperationService {
     }
 
     /**
-     * Calcula precio Steam Community Market - margen. El precio local queda
-     * como fallback si Steam no tiene precio para ese market_hash_name.
+     * Calcula precio externo - margen. El precio local queda como fallback si
+     * el feed no tiene precio para ese market_hash_name.
      */
     private double precioSteamMarketplace(Skin skin) {
         if (skin == null) return PRECIO_DEFAULT_SKIN;

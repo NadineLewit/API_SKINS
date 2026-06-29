@@ -1,11 +1,11 @@
 package skinsmarket.demo.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.util.UriComponentsBuilder;
 import skinsmarket.demo.entity.InventarioItem;
 import skinsmarket.demo.entity.Skin;
 import skinsmarket.demo.entity.SkinCatalogo;
@@ -17,8 +17,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -27,29 +29,26 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class SteamMarketPriceService {
 
-    private static final String PRICE_OVERVIEW_URL =
-            "https://steamcommunity.com/market/priceoverview/";
-    private static final int CS2_APP_ID = 730;
-    private static final int ARS_CURRENCY_ID = 34;
-    private static final Duration CACHE_TTL = Duration.ofMinutes(20);
+    private static final Duration FAILED_FETCH_BACKOFF = Duration.ofMinutes(5);
     private static final Charset WINDOWS_1252 = Charset.forName("windows-1252");
 
     @Autowired
     private RestTemplate restTemplate;
 
-    @Value("${application.balance.usd-to-ars:1451.02}")
-    private double usdToArs;
-
     @Value("${steam.market.discount-rate:0.08}")
     private double discountRate;
 
-    @Value("${steam.market.request-spacing-ms:350}")
-    private long requestSpacingMs;
+    @Value("${steam.market.price-feed-url:https://raw.githubusercontent.com/SKINSTRACK/CS2-Price-API/main/free_prices.json}")
+    private String priceFeedUrl;
 
-    private final Map<String, CachedPrice> cache = new ConcurrentHashMap<>();
-    private final Object steamRequestLock = new Object();
-    private Instant nextSteamRequestAt = Instant.EPOCH;
-    private Instant rateLimitedUntil = Instant.EPOCH;
+    @Value("${steam.market.price-feed-cache-minutes:360}")
+    private long priceFeedCacheMinutes;
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final Object priceFeedLock = new Object();
+    private volatile Map<String, Double> priceFeedCache = Collections.emptyMap();
+    private volatile Instant priceFeedFetchedAt = Instant.EPOCH;
+    private volatile Instant lastFailedFetchAt = Instant.EPOCH;
 
     public double estimateSkinPriceUsd(Skin skin, double fallbackUsd) {
         if (skin == null) return roundMoney(fallbackUsd);
@@ -87,84 +86,114 @@ public class SteamMarketPriceService {
     }
 
     private Optional<Double> findPriceUsd(Set<String> marketHashNames) {
+        if (marketHashNames == null || marketHashNames.isEmpty()) {
+            return Optional.empty();
+        }
+
+        Map<String, Double> prices = loadPriceFeed();
+        if (prices.isEmpty()) {
+            return Optional.empty();
+        }
+
         for (String marketHashName : marketHashNames) {
-            Optional<Double> price = findSinglePriceUsd(marketHashName);
-            if (price.isPresent()) return price;
+            for (String candidate : marketHashCandidates(marketHashName)) {
+                Double priceUsd = prices.get(normalizePriceKey(candidate));
+                if (priceUsd != null && priceUsd > 0) {
+                    return Optional.of(roundMoney(applyDiscount(priceUsd)));
+                }
+            }
         }
         return Optional.empty();
     }
 
-    private Optional<Double> findSinglePriceUsd(String marketHashName) {
-        if (marketHashName == null || marketHashName.isBlank()) {
-            return Optional.empty();
+    private Map<String, Double> loadPriceFeed() {
+        Instant now = Instant.now();
+        Duration ttl = Duration.ofMinutes(Math.max(priceFeedCacheMinutes, 1));
+
+        if (!priceFeedCache.isEmpty() && priceFeedFetchedAt.plus(ttl).isAfter(now)) {
+            return priceFeedCache;
+        }
+        if (priceFeedCache.isEmpty() && lastFailedFetchAt.plus(FAILED_FETCH_BACKOFF).isAfter(now)) {
+            return priceFeedCache;
         }
 
-        String key = normalizeMojibake(marketHashName).toLowerCase();
-        CachedPrice cached = cache.get(key);
-        if (cached != null && cached.isFresh()) {
-            return Optional.of(cached.priceUsd());
-        }
+        synchronized (priceFeedLock) {
+            now = Instant.now();
+            if (!priceFeedCache.isEmpty() && priceFeedFetchedAt.plus(ttl).isAfter(now)) {
+                return priceFeedCache;
+            }
+            if (priceFeedCache.isEmpty() && lastFailedFetchAt.plus(FAILED_FETCH_BACKOFF).isAfter(now)) {
+                return priceFeedCache;
+            }
 
-        Optional<Double> steamPriceArs = fetchSteamPriceArs(marketHashName);
-        if (steamPriceArs.isEmpty()) {
-            return Optional.empty();
-        }
-
-        double priceUsd = roundMoney(toDiscountedUsd(steamPriceArs.get()));
-        cache.put(key, new CachedPrice(priceUsd, Instant.now()));
-        return Optional.of(priceUsd);
-    }
-
-    private Optional<Double> fetchSteamPriceArs(String marketHashName) {
-        if (Instant.now().isBefore(rateLimitedUntil)) {
-            return Optional.empty();
-        }
-
-        for (String candidate : marketHashCandidates(marketHashName)) {
             try {
-                waitForSteamSlot();
-
-                String url = UriComponentsBuilder
-                        .fromUriString(PRICE_OVERVIEW_URL)
-                        .queryParam("appid", CS2_APP_ID)
-                        .queryParam("currency", ARS_CURRENCY_ID)
-                        .queryParam("market_hash_name", candidate)
-                        .encode()
-                        .toUriString();
-
-                @SuppressWarnings("unchecked")
-                Map<String, Object> body = restTemplate.getForObject(url, Map.class);
-                if (body == null || !Boolean.TRUE.equals(body.get("success"))) {
-                    continue;
+                String json = restTemplate.getForObject(priceFeedUrl, String.class);
+                Map<String, Object> body = json == null || json.isBlank()
+                        ? Collections.emptyMap()
+                        : objectMapper.readValue(json, new TypeReference<>() {});
+                Map<String, Double> prices = parsePriceFeed(body);
+                if (!prices.isEmpty()) {
+                    priceFeedCache = Map.copyOf(prices);
+                    priceFeedFetchedAt = Instant.now();
+                    return priceFeedCache;
                 }
-
-                String priceText = firstText(body.get("median_price"), body.get("lowest_price"));
-                if (priceText == null) continue;
-
-                Optional<Double> price = parseSteamMoney(priceText);
-                if (price.isPresent()) return price;
-            } catch (HttpClientErrorException.TooManyRequests e) {
-                rateLimitedUntil = Instant.now().plus(Duration.ofSeconds(60));
-                return Optional.empty();
-            } catch (Exception ignored) {
-                // Steam can rate-limit a single candidate. Try the next normalized form.
+                lastFailedFetchAt = Instant.now();
+            } catch (Exception e) {
+                lastFailedFetchAt = Instant.now();
+                System.err.println("[PRICE] No se pudo cargar el feed de precios: " + e.getMessage());
             }
+            return priceFeedCache;
         }
-        return Optional.empty();
     }
 
-    private void waitForSteamSlot() {
-        synchronized (steamRequestLock) {
-            Instant now = Instant.now();
-            if (now.isBefore(nextSteamRequestAt)) {
-                try {
-                    Thread.sleep(Duration.between(now, nextSteamRequestAt).toMillis());
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }
-            nextSteamRequestAt = Instant.now().plusMillis(Math.max(requestSpacingMs, 0));
+    private Map<String, Double> parsePriceFeed(Map<String, Object> body) {
+        if (body == null || body.isEmpty()) {
+            return Collections.emptyMap();
         }
+
+        Object dataNode = body.get("data");
+        Object itemsNode = dataNode instanceof Map<?, ?> data
+                ? data.get("items")
+                : body.get("items");
+
+        if (!(itemsNode instanceof List<?> items)) {
+            return Collections.emptyMap();
+        }
+
+        Map<String, Double> prices = new ConcurrentHashMap<>();
+        for (Object itemNode : items) {
+            if (!(itemNode instanceof Map<?, ?> item)) continue;
+
+            String marketHashName = asText(item.get("market_hash_name"));
+            if (marketHashName.isBlank()) continue;
+
+            Optional<Double> price = extractSteamPrice(item.get("prices"));
+            price.ifPresent(value -> prices.put(normalizePriceKey(marketHashName), value));
+        }
+        return prices;
+    }
+
+    private Optional<Double> extractSteamPrice(Object pricesNode) {
+        if (!(pricesNode instanceof List<?> prices)) {
+            return Optional.empty();
+        }
+
+        Double firstPositivePrice = null;
+        for (Object priceNode : prices) {
+            if (!(priceNode instanceof Map<?, ?> priceData)) continue;
+
+            Double price = asPositiveDouble(priceData.get("price"));
+            if (price == null) continue;
+
+            String provider = asText(priceData.get("provider"));
+            if ("steam".equalsIgnoreCase(provider)) {
+                return Optional.of(price);
+            }
+            if (firstPositivePrice == null) {
+                firstPositivePrice = price;
+            }
+        }
+        return Optional.ofNullable(firstPositivePrice);
     }
 
     private String resolveMarketHashName(Skin skin) {
@@ -248,7 +277,7 @@ public class SteamMarketPriceService {
     private boolean needsCollectibleStar(String marketHashName, SkinCatalogo catalogo) {
         String haystack = (marketHashName + " " +
                 (catalogo != null ? catalogo.getWeaponName() + " " + catalogo.getCategoryName() : ""))
-                .toLowerCase();
+                .toLowerCase(Locale.ROOT);
         return haystack.contains("knife") ||
                 haystack.contains("gloves") ||
                 haystack.contains("bayonet") ||
@@ -261,6 +290,10 @@ public class SteamMarketPriceService {
         addCandidate(candidates, normalized, null);
         addCandidate(candidates, tryDecodeMojibakeIfNeeded(normalized), null);
         return candidates;
+    }
+
+    private String normalizePriceKey(String value) {
+        return normalizeMojibake(value).toLowerCase(Locale.ROOT);
     }
 
     private String normalizeMojibake(String value) {
@@ -307,47 +340,34 @@ public class SteamMarketPriceService {
         };
     }
 
-    private double toDiscountedUsd(double steamPriceArs) {
-        double effectiveRate = usdToArs > 0 ? usdToArs : 1451.02;
+    private double applyDiscount(double priceUsd) {
         double safeDiscountRate = Math.max(0.0, Math.min(discountRate, 1.0));
-        double discountedArs = steamPriceArs * (1.0 - safeDiscountRate);
-        return discountedArs / effectiveRate;
+        return priceUsd * (1.0 - safeDiscountRate);
     }
 
-    private Optional<Double> parseSteamMoney(String raw) {
-        String normalized = raw.replaceAll("[^0-9,.]", "");
-        if (normalized.isBlank()) return Optional.empty();
-
-        int comma = normalized.lastIndexOf(',');
-        int dot = normalized.lastIndexOf('.');
-        if (comma >= 0 && comma > dot) {
-            normalized = normalized.replace(".", "").replace(',', '.');
-        } else {
-            normalized = normalized.replace(",", "");
+    private Double asPositiveDouble(Object value) {
+        if (value instanceof Number number) {
+            double parsed = number.doubleValue();
+            return parsed > 0 ? parsed : null;
         }
-
-        try {
-            return Optional.of(Double.parseDouble(normalized));
-        } catch (NumberFormatException ignored) {
-            return Optional.empty();
+        if (value instanceof String text && !text.isBlank()) {
+            try {
+                double parsed = Double.parseDouble(text);
+                return parsed > 0 ? parsed : null;
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
         }
-    }
-
-    private String firstText(Object first, Object second) {
-        if (first instanceof String value && !value.isBlank()) return value;
-        if (second instanceof String value && !value.isBlank()) return value;
         return null;
+    }
+
+    private String asText(Object value) {
+        return value instanceof String text ? text.trim() : "";
     }
 
     private double roundMoney(double value) {
         return BigDecimal.valueOf(Math.max(value, 0.01))
                 .setScale(2, RoundingMode.HALF_UP)
                 .doubleValue();
-    }
-
-    private record CachedPrice(double priceUsd, Instant createdAt) {
-        boolean isFresh() {
-            return createdAt.plus(CACHE_TTL).isAfter(Instant.now());
-        }
     }
 }
