@@ -23,6 +23,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * OrderServiceImpl — flujo de COMPRA clásico, integrado ahora con
@@ -75,11 +76,50 @@ public class OrderServiceImpl implements OrderService {
                 .sorted(Comparator.comparing(OrderDetailRequest::getSkinId))
                 .toList();
 
+        OrderResponse reusablePendingOrder = findReusablePendingCartOrder(user, items);
+        if (reusablePendingOrder != null) {
+            return reusablePendingOrder;
+        }
+
         OrderRequest orderRequest = new OrderRequest();
         orderRequest.setItemList(items);
         orderRequest.setCodigoCupon(codigoCupon);
 
         return createOrder(user, orderRequest);
+    }
+
+    private OrderResponse findReusablePendingCartOrder(User user, List<OrderDetailRequest> requestedItems) {
+        List<Long> requestedSkinIds = requestedItems.stream()
+                .map(OrderDetailRequest::getSkinId)
+                .filter(Objects::nonNull)
+                .sorted()
+                .toList();
+        if (requestedSkinIds.isEmpty()) return null;
+
+        List<Order> pendingOrders = orderRepository.findByUserEmailAndPaymentStatusInOrderByDateDesc(
+                user.getEmail(),
+                List.of("PENDING_PAYMENT", "IN_PROCESS"));
+
+        return pendingOrders.stream()
+                .filter(order -> order.getOperationType() == OperationType.PURCHASE)
+                .filter(order -> order.getTradeStatus() == null ||
+                        order.getTradeStatus() == TradeStatus.WAITING_PAYMENT)
+                .filter(order -> sameSkinSelection(order, requestedSkinIds))
+                .findFirst()
+                .map(this::mapToOrderResponse)
+                .orElse(null);
+    }
+
+    private boolean sameSkinSelection(Order order, List<Long> requestedSkinIds) {
+        List<Long> orderSkinIds = order.getOrderDetails().stream()
+                .map(OrderDetail::getSkin)
+                .filter(Objects::nonNull)
+                .map(Skin::getId)
+                .filter(Objects::nonNull)
+                .sorted()
+                .toList();
+
+        return orderSkinIds.equals(requestedSkinIds);
     }
 
     @Override
