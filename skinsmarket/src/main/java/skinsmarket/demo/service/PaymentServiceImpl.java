@@ -53,6 +53,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -388,7 +389,8 @@ public class PaymentServiceImpl implements PaymentService {
         double balance = roundMoney(user.getSaldo() != null ? user.getSaldo() : 0.0);
         if (balance < total) {
             throw new RuntimeException(String.format(
-                    "Saldo insuficiente. Te faltan $%.2f.", roundMoney(total - balance)));
+                    Locale.forLanguageTag("es-AR"),
+                    "Saldo insuficiente. Te faltan $%.2f USD.", roundMoney(total - balance)));
         }
 
         user.setSaldo(roundMoney(balance - total));
